@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>	/* va_list */
 /*#include <locale.h>
 #include <unistd.h>
 #include <sys/mount.h> */
@@ -27,12 +28,16 @@ void udev_custom_log_fn(struct udev *udev,
 /****************************************************************/
 
 /* Write message along with a newline to the LOG_FILE */
-void log_fn(const char *msg)
+#define log_fn(format, ...) _log_fn(format"\n", ##__VA_ARGS__)
+void _log_fn(const char *format, ...)
 {
 	FILE *LOG_FP = fopen(LOG_FILE, "a");
 	if(!LOG_FP) return;
 
-	fprintf(LOG_FP, "%s\n", msg);
+	va_list arg;
+	va_start(arg, format);
+	vfprintf(LOG_FP, format , arg);
+	va_end(arg);
 	fclose(LOG_FP);
 }
 
