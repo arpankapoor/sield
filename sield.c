@@ -1,5 +1,5 @@
 #include <libudev.h>
-#include <syslog.h>	/* Log priority */
+/*#include <syslog.h>*/	/* Log priority */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,36 +26,62 @@ void udev_custom_log_fn(struct udev *udev,
 
 /****************************************************************/
 
+/* Write message along with a newline to the LOG_FILE */
+void log_fn(const char *msg)
+{
+	FILE *LOG_FP = fopen(LOG_FILE, "a");
+	if(!LOG_FP) return;
+
+	fprintf(LOG_FP, "%s\n", msg);
+	fclose(LOG_FP);
+}
+
+/* Return a listening udev_monitor with given
+ * event source, subsystem and device type. */
+struct udev_monitor *monitor_device_with_subsytem_devtype(
+	struct udev *udev, const char *event_source,
+	const char *subsystem, const char *devtype)
+{
+	struct udev_monitor *monitor;
+	monitor = udev_monitor_new_from_netlink(udev, event_source);
+	if (!monitor) {
+		log_fn("Failed to setup a new udev_monitor.");
+		return NULL;
+	}
+
+	int rt;
+	rt = udev_monitor_filter_add_match_subsystem_devtype(
+			monitor, subsystem, devtype);
+	if (rt != 0) {
+		log_fn("Failed to setup monitor filter.");
+		return NULL;
+	}
+
+	rt = udev_monitor_enable_receiving(monitor);
+	if (rt != 0) {
+		log_fn("Failed to bind udev_monitor to event source.");
+		return NULL;
+	}
+
+	return monitor;
+}
+
 int main (void)
 {
-	int rc;
 	struct udev *udev;
 	struct udev_monitor *monitor;
 	struct udev_device *device, *parent;
 
        	udev = udev_new();
 	udev_set_log_fn(udev, udev_custom_log_fn);
-	if (!udev) {
-		fprintf(stderr, "error: udev_new() returned NULL");
-		exit(EXIT_FAILURE);
-	}
 
-	/* Log every possible message */
-	/* udev_set_log_priority(udev, LOG_DEBUG); */
+	/* Uncomment to increase log priority */
+	/** udev_set_log_priority(udev, LOG_DEBUG); **/
 
-	/* Setup a udev_monitor to monitor block devices with any device type */
-	monitor = udev_monitor_new_from_netlink(udev, "udev");
-	rc = udev_monitor_filter_add_match_subsystem_devtype(monitor, "block", NULL);
-	if (rc < 0) {
-		fprintf(stderr, "error: udev_monitor_filter_add_match_subsystem_devtype()");
-		exit(EXIT_FAILURE);
-	}
-
-	rc = udev_monitor_enable_receiving(monitor);
-	if (rc < 0) {
-		fprintf(stderr, "error: udev_monitor_enable_receiving");
-		exit(EXIT_FAILURE);
-	}
+	/* Monitor block devices */
+	monitor = monitor_device_with_subsytem_devtype(
+			udev, "udev", "block", NULL);
+	if (!monitor) exit(EXIT_FAILURE);
 
 	while (1) {
 		/* udev_monitor_receive_device is NONBLOCKING. */
