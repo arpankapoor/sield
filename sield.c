@@ -3,52 +3,86 @@
 #include <stdarg.h>	/* va_list */
 #include <string.h>
 #include <libudev.h>
+#include <time.h>
 /*#include <locale.h>
 #include <unistd.h>
 #include <sys/mount.h> */
 
+/**************************** LOGGING ******************************/
+
 const char *LOG_FILE = "/var/log/sield.log";
 
-/*********************** UDEV EXTENSIONS ************************/
-
-void udev_custom_log_fn(struct udev *udev,
-	int priority, const char *file, int line, const char *fn,
-	const char *format, va_list args)
+FILE *open_log_file(void)
 {
 	FILE *LOG_FP = fopen(LOG_FILE, "a");
 	if (!LOG_FP) {
 #ifdef DEBUG
 		fprintf(stderr, "Unable to open log file.\n");
 #endif
-		return;
+		return NULL;
 	}
 
-	fprintf(LOG_FP, "libudev: %s: ", fn);
-	vfprintf(LOG_FP, format, args);
-
-	fclose(LOG_FP);
+	return LOG_FP;
 }
 
-/****************************************************************/
+void close_log_file(FILE *LOG_FP)
+{
+	if (fclose(LOG_FP) != 0) {
+#ifdef DEBUG
+		fprintf(stderr, "Unable to close log file.\n");
+#endif
+	}
+}
+
+/* Write current system time in the format "[%Y-%m-%d %H:%M] "
+ * to given file stream. */
+void write_timestamp(FILE *fp)
+{
+	if (!fp) return;
+
+	time_t timer = time(NULL);
+	char current_time[20];
+	strftime(current_time, 20, "[%F %R] ", localtime(&timer));
+
+	fprintf(fp, current_time);
+}
 
 /* Write message along with a newline to the LOG_FILE */
 #define log_fn(format, ...) _log_fn(format"\n", ##__VA_ARGS__)
 void _log_fn(const char *format, ...)
 {
-	FILE *LOG_FP = fopen(LOG_FILE, "a");
-	if(!LOG_FP) {
-#ifdef DEBUG
-		fprintf(stderr, "Unable to open log file.\n");
-#endif
-		return;
-	}
+	FILE *LOG_FP = open_log_file();
+	if(!LOG_FP) return;
+
+	write_timestamp(LOG_FP);
 
 	va_list arg;
 	va_start(arg, format);
 	vfprintf(LOG_FP, format , arg);
 	va_end(arg);
-	fclose(LOG_FP);
+	close_log_file(LOG_FP);
 }
+
+/********************************************************************/
+
+
+/*********************** UDEV EXTENSIONS ****************************/
+
+void udev_custom_log_fn(struct udev *udev,
+	int priority, const char *file, int line, const char *fn,
+	const char *format, va_list args)
+{
+	FILE *LOG_FP = open_log_file();
+	if (!LOG_FP) return;
+
+	write_timestamp(LOG_FP);
+	fprintf(LOG_FP, "[libudev] [%s] ", fn);
+	vfprintf(LOG_FP, format, args);
+
+	close_log_file(LOG_FP);
+}
+
+/********************************************************************/
 
 /* Return a listening udev_monitor with given
  * event source, subsystem and device type. */
