@@ -1,9 +1,9 @@
-#include <libudev.h>
-/*#include <syslog.h>*/	/* Log priority */
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <stdarg.h>	/* va_list */
+#include <string.h>
+#include <syslog.h>	/* Log priority */
+#include <libudev.h>
 /*#include <locale.h>
 #include <unistd.h>
 #include <sys/mount.h> */
@@ -17,7 +17,12 @@ void udev_custom_log_fn(struct udev *udev,
 	const char *format, va_list args)
 {
 	FILE *LOG_FP = fopen(LOG_FILE, "a");
-	if (!LOG_FP) return;
+	if (!LOG_FP) {
+#ifdef DEBUG
+		fprintf(stderr, "Unable to open log file.\n");
+#endif
+		return;
+	}
 
 	fprintf(LOG_FP, "libudev: %s: ", fn);
 	vfprintf(LOG_FP, format, args);
@@ -32,7 +37,12 @@ void udev_custom_log_fn(struct udev *udev,
 void _log_fn(const char *format, ...)
 {
 	FILE *LOG_FP = fopen(LOG_FILE, "a");
-	if(!LOG_FP) return;
+	if(!LOG_FP) {
+#ifdef DEBUG
+		fprintf(stderr, "Unable to open log file.\n");
+#endif
+		return;
+	}
 
 	va_list arg;
 	va_start(arg, format);
@@ -91,8 +101,10 @@ int main(int argc, char **argv)
 	struct udev *udev = udev_new();
 	udev_set_log_fn(udev, udev_custom_log_fn);
 
-	/* Uncomment to increase log priority */
-	/** udev_set_log_priority(udev, LOG_DEBUG); **/
+#ifdef DEBUG
+	/* Increase log priority */
+	udev_set_log_priority(udev, LOG_DEBUG);
+#endif
 
 	/* Monitor block devices */
 	struct udev_monitor *monitor = monitor_device_with_subsytem_devtype(
