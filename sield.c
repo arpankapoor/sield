@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <stdarg.h>	/* va_list */
 #include <string.h>
-#include <syslog.h>	/* Log priority */
 #include <libudev.h>
 /*#include <locale.h>
 #include <unistd.h>
@@ -100,11 +99,6 @@ int main(int argc, char **argv)
 {
 	struct udev *udev = udev_new();
 	udev_set_log_fn(udev, udev_custom_log_fn);
-
-#ifdef DEBUG
-	/* Increase log priority */
-	udev_set_log_priority(udev, LOG_DEBUG);
-#endif
 
 	/* Monitor block devices */
 	struct udev_monitor *monitor = monitor_device_with_subsytem_devtype(
