@@ -66,31 +66,44 @@ struct udev_monitor *monitor_device_with_subsytem_devtype(
 	return monitor;
 }
 
-int main (void)
+/* Return a udev_device with given action, else return NULL */
+struct udev_device *receive_device_with_action(
+	struct udev_monitor *monitor, const char *action)
 {
-	struct udev *udev;
-	struct udev_monitor *monitor;
-	struct udev_device *device, *parent;
+	/* udev_monitor_receive_device is NONBLOCKING */
+	struct udev_device *device = udev_monitor_receive_device(monitor);
+	if (device) {
+		const char *actual_action = udev_device_get_action(device);
+		if (strcmp(actual_action, action) == 0) return device;
+		else return NULL;
+	}
 
-       	udev = udev_new();
+	return NULL;
+}
+
+int main(int argc, char **argv)
+{
+	struct udev *udev = udev_new();
 	udev_set_log_fn(udev, udev_custom_log_fn);
 
 	/* Uncomment to increase log priority */
 	/** udev_set_log_priority(udev, LOG_DEBUG); **/
 
 	/* Monitor block devices */
-	monitor = monitor_device_with_subsytem_devtype(
-			udev, "udev", "block", NULL);
+	struct udev_monitor *monitor = monitor_device_with_subsytem_devtype(
+					udev, "udev", "block", NULL);
 	if (!monitor) exit(EXIT_FAILURE);
 
 	while (1) {
-		/* udev_monitor_receive_device is NONBLOCKING. */
-		device = udev_monitor_receive_device(monitor);
+		/* Receive udev_device for any "block" device which was
+		 * plugged in ("add"ed) to the system. */
+		struct udev_device *device = receive_device_with_action(
+						monitor, "add");
 		if (device) {
 			/* Ensure that the device is a USB "disk". */
 			const char *action = udev_device_get_action(device);
 			const char *devtype = udev_device_get_devtype(device);
-			parent = udev_device_get_parent_with_subsystem_devtype(
+			struct udev_device *parent = udev_device_get_parent_with_subsystem_devtype(
 					device, "usb", "usb_device");
 
 			if (parent && strcmp(action, "add") == 0) {
