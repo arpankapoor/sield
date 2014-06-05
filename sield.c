@@ -7,6 +7,25 @@
 #include <unistd.h>
 #include <sys/mount.h> */
 
+const char *LOG_FILE = "/var/log/sield.log";
+
+/*********************** UDEV EXTENSIONS ************************/
+
+void udev_custom_log_fn(struct udev *udev,
+	int priority, const char *file, int line, const char *fn,
+	const char *format, va_list args)
+{
+	FILE *LOG_FP = fopen(LOG_FILE, "a");
+	if (!LOG_FP) return;
+
+	fprintf(LOG_FP, "libudev: %s: ", fn);
+	vfprintf(LOG_FP, format, args);
+
+	fclose(LOG_FP);
+}
+
+/****************************************************************/
+
 int main (void)
 {
 	int rc;
@@ -15,6 +34,7 @@ int main (void)
 	struct udev_device *device, *parent;
 
        	udev = udev_new();
+	udev_set_log_fn(udev, udev_custom_log_fn);
 	if (!udev) {
 		fprintf(stderr, "error: udev_new() returned NULL");
 		exit(EXIT_FAILURE);
