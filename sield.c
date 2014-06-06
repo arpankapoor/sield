@@ -128,13 +128,6 @@ struct udev_device *receive_device_with_action(
 	return NULL;
 }
 
-bool has_parent_with_subsystem_devtype(struct udev_device *device,
-		const char *subsystem, const char *devtype)
-{
-	return udev_device_get_parent_with_subsystem_devtype(
-		device, subsystem, devtype) != NULL;
-}
-
 int main(int argc, char **argv)
 {
 	struct udev *udev = udev_new();
@@ -150,28 +143,27 @@ int main(int argc, char **argv)
 		 * plugged in ("add"ed) to the system. */
 		struct udev_device *device = receive_device_with_action(
 						monitor, "add");
-		if (device) {
-			/* Ensure that the device is a USB "disk". */
-			const char *action = udev_device_get_action(device);
+
+		/* The device should be using USB */
+		struct udev_device *parent = udev_device_get_parent_with_subsystem_devtype(
+						device, "usb", "usb_device");
+
+		if (device && parent) {
 			const char *devtype = udev_device_get_devtype(device);
-			struct udev_device *parent = udev_device_get_parent_with_subsystem_devtype(
-					device, "usb", "usb_device");
 
-			if (parent && strcmp(action, "add") == 0) {
-				printf("%s %s inserted ",
-					udev_device_get_sysattr_value(parent, "manufacturer"),
-					udev_device_get_sysattr_value(parent, "product"));
+			printf("%s %s inserted ",
+				udev_device_get_sysattr_value(parent, "manufacturer"),
+				udev_device_get_sysattr_value(parent, "product"));
 
-				if (strcmp(devtype, "disk") == 0) {
-					printf ("with device node %s.\n",
-						udev_device_get_devnode(device));
-				} else if (strcmp(devtype, "partition") == 0) {
-					printf ("with partition %s.\n",
-						udev_device_get_devnode(device));
-				}
-
-				udev_device_unref(device);
+			if (strcmp(devtype, "disk") == 0) {
+				printf ("with device node %s.\n",
+					udev_device_get_devnode(device));
+			} else if (strcmp(devtype, "partition") == 0) {
+				printf ("with partition %s.\n",
+					udev_device_get_devnode(device));
 			}
+
+			udev_device_unref(device);
 		}
 	}
 
