@@ -123,7 +123,6 @@ struct udev_device *receive_device_with_action(
 	if (device) {
 		const char *actual_action = udev_device_get_action(device);
 		if (strcmp(actual_action, action) == 0) return device;
-		else return NULL;
 	}
 
 	return NULL;
