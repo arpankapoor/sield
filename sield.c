@@ -63,6 +63,28 @@ void _log_fn(const char *format, ...)
 	close_log_file(LOG_FP);
 }
 
+/* Log block device information */
+void log_block_device_info(struct udev_device *device,
+	struct udev_device *parent)
+{
+	log_fn("%s identified.\n"
+		"Vendor=%s ProdID=%s Rev=%s\n"
+		"Manufacturer=%s\n"
+		"Product=%s\n"
+		"SerialNumber=%s\n"
+		"DeviceNode=%s\n"
+		"FileSystem=%s\n",
+		udev_device_get_devtype(device),
+		udev_device_get_sysattr_value(parent, "idVendor"),
+		udev_device_get_sysattr_value(parent, "idProduct"),
+		udev_device_get_sysattr_value(parent, "bcdDevice"),
+		udev_device_get_sysattr_value(parent, "manufacturer"),
+		udev_device_get_sysattr_value(parent, "product"),
+		udev_device_get_sysattr_value(parent, "serial"),
+		udev_device_get_devnode(device),
+		udev_device_get_property_value(device, "ID_FS_TYPE"));
+}
+
 /********************************************************************/
 
 
@@ -149,20 +171,9 @@ int main(int argc, char **argv)
 						device, "usb", "usb_device");
 
 		if (device && parent) {
-			const char *devtype = udev_device_get_devtype(device);
+			log_block_device_info(device, parent);
 
-			printf("%s %s inserted ",
-				udev_device_get_sysattr_value(parent, "manufacturer"),
-				udev_device_get_sysattr_value(parent, "product"));
-
-			if (strcmp(devtype, "disk") == 0) {
-				printf ("with device node %s.\n",
-					udev_device_get_devnode(device));
-			} else if (strcmp(devtype, "partition") == 0) {
-				printf ("with partition %s.\n",
-					udev_device_get_devnode(device));
-			}
-
+			/* Parent will also be cleaned up */
 			udev_device_unref(device);
 		}
 	}
