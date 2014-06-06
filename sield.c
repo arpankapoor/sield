@@ -90,8 +90,8 @@ struct udev_monitor *monitor_device_with_subsytem_devtype(
 	struct udev *udev, const char *event_source,
 	const char *subsystem, const char *devtype)
 {
-	struct udev_monitor *monitor;
-	monitor = udev_monitor_new_from_netlink(udev, event_source);
+	struct udev_monitor *monitor = udev_monitor_new_from_netlink(
+					udev, event_source);
 	if (!monitor) {
 		log_fn("Failed to setup a new udev_monitor.");
 		return NULL;
@@ -99,7 +99,7 @@ struct udev_monitor *monitor_device_with_subsytem_devtype(
 
 	int rt;
 	rt = udev_monitor_filter_add_match_subsystem_devtype(
-			monitor, subsystem, devtype);
+		monitor, subsystem, devtype);
 	if (rt != 0) {
 		log_fn("Failed to setup monitor filter.");
 		return NULL;
@@ -126,6 +126,13 @@ struct udev_device *receive_device_with_action(
 	}
 
 	return NULL;
+}
+
+bool has_parent_with_subsystem_devtype(struct udev_device *device,
+		const char *subsystem, const char *devtype)
+{
+	return udev_device_get_parent_with_subsystem_devtype(
+		device, subsystem, devtype) != NULL;
 }
 
 int main(int argc, char **argv)
