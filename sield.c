@@ -67,6 +67,7 @@ void _log_fn(const char *format, ...)
 void log_block_device_info(struct udev_device *device,
 	struct udev_device *parent)
 {
+	if (!device || !parent) return;
 	log_fn("%s identified.\n"
 		"Vendor=%s ProdID=%s Rev=%s\n"
 		"Manufacturer=%s\n"
