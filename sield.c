@@ -109,7 +109,7 @@ void udev_custom_log_fn(struct udev *udev,
 
 /* Return a listening udev_monitor with given
  * event source, subsystem and device type. */
-struct udev_monitor *monitor_device_with_subsytem_devtype(
+struct udev_monitor *monitor_device_with_subsystem_devtype(
 	struct udev *udev, const char *event_source,
 	const char *subsystem, const char *devtype)
 {
@@ -157,7 +157,7 @@ int main(int argc, char **argv)
 	udev_set_log_fn(udev, udev_custom_log_fn);
 
 	/* Monitor block devices */
-	struct udev_monitor *monitor = monitor_device_with_subsytem_devtype(
+	struct udev_monitor *monitor = monitor_device_with_subsystem_devtype(
 					udev, "udev", "block", NULL);
 	if (!monitor) exit(EXIT_FAILURE);
 
