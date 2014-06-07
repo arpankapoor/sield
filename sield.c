@@ -7,6 +7,7 @@
 /*#include <locale.h>
 #include <unistd.h>
 #include <sys/mount.h> */
+#include "sield.h"
 
 /**************************** LOGGING ******************************/
 
