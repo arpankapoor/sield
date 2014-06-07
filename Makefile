@@ -1,6 +1,10 @@
 CFLAGS=-Wall -ludev
 
-all: sield
+sield: sield.o sield-log.o
+	cc -Wall -ludev -o sield sield.o sield-log.o
+
+sield.o sield-log.h: sield.h
 
 clean:
+	rm -f *.o
 	rm -f sield

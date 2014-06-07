@@ -7,10 +7,7 @@
 /*
  * Logging functions
  */
-FILE *open_log_file(void);
-void close_log_file(FILE *LOG_FP);
-
-void write_timestamp(FILE *fp);
+#define log_fn(format, ...) _log_fn(format"\n", ##__VA_ARGS__)
 void _log_fn(const char *format, ...);
 void log_block_device_info(struct udev_device *device,
 	struct udev_device *parent);
@@ -29,6 +26,5 @@ struct udev_monitor *monitor_device_with_subsystem_devtype(
 
 struct udev_device *receive_device_with_action(
 	struct udev_monitor *monitor, const char *action);
-
 
 #endif
