@@ -1,3 +1,6 @@
 # Prevent any block device from automounting.
 # Handles both udisks and udisks2
+# Look at the section "DEVICE INFORMATION" in:
+# http://udisks.freedesktop.org/docs/latest/udisks.8.html (udisks2)
+# http://udisks.freedesktop.org/docs/1.0.5/udisks.7.html (udisks)
 ACTION=="add|change", SUBSYSTEM=="block", SUBSYSTEMS=="usb", ENV{UDISKS_PRESENTATION_HIDE}="1", ENV{UDISKS_PRESENTATION_NOPOLICY}="1", ENV{UDISKS_AUTOMOUNT_HINT}="never", ENV{UDISKS_IGNORE}="1", ENV{UDISKS_AUTO}="0"
