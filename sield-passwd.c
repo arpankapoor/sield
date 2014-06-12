@@ -55,7 +55,7 @@ static char *get_encrypted_user_passwd(const char *user)
  * the one stored in the shadow file,
  * otherwise return 0.
  */
-int check_passwd(const char *user, const char *passwd)
+int passwd_check(const char *user, const char *passwd)
 {
 	char *actual_encrypted_user_passwd = get_encrypted_user_passwd(user);
 

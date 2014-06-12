@@ -12,6 +12,10 @@ void _log_fn(const char *format, ...);
 void log_block_device_info(struct udev_device *device,
 	struct udev_device *parent);
 
+/*
+ * Password check
+ */
+int passwd_check(const char *user, const char *passwd);
 
 /*
  * udev helper functions
