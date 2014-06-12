@@ -5,6 +5,10 @@
 
 static const char *LOG_FILE = "/var/log/sield.log";
 
+static FILE *open_log_file(void);
+static void close_log_file(FILE *LOG_FP);
+static void write_timestamp(FILE *fp);
+
 static FILE *open_log_file(void)
 {
 	FILE *LOG_FP = fopen(LOG_FILE, "a");
@@ -29,13 +33,14 @@ static void close_log_file(FILE *LOG_FP)
 
 /* Write current system time in the format "[%Y-%m-%d %H:%M] "
  * to given file stream. */
+#define TIME_STR_BUFFER 25
 static void write_timestamp(FILE *fp)
 {
 	if (!fp) return;
 
 	time_t timer = time(NULL);
-	char current_time[20];
-	strftime(current_time, 20, "[%F %R] ", localtime(&timer));
+	char current_time[TIME_STR_BUFFER];
+	strftime(current_time, TIME_STR_BUFFER, "[%F %T] ", localtime(&timer));
 
 	fprintf(fp, current_time);
 }
@@ -61,16 +66,16 @@ void log_block_device_info(struct udev_device *device,
 {
 	if (!device || !parent) return;
 	log_fn("%s identified.\n"
-		"Vendor=%s ProdID=%s Rev=%s\n"
-		"Manufacturer=%s\n"
-		"Product=%s\n"
-		"SerialNumber=%s\n"
-		"DeviceNode=%s\n"
-		"FileSystem=%s\n",
+		"  DEVICE INFORMATION\n"
+		"\tVendor=%s ProdID=%s\n"
+		"\tManufacturer=%s\n"
+		"\tProduct=%s\n"
+		"\tSerial#=%s\n"
+		"\tDevNode=%s\n"
+		"\tFileSystem=%s\n",
 		udev_device_get_devtype(device),
 		udev_device_get_sysattr_value(parent, "idVendor"),
 		udev_device_get_sysattr_value(parent, "idProduct"),
-		udev_device_get_sysattr_value(parent, "bcdDevice"),
 		udev_device_get_sysattr_value(parent, "manufacturer"),
 		udev_device_get_sysattr_value(parent, "product"),
 		udev_device_get_sysattr_value(parent, "serial"),
