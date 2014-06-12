@@ -5,7 +5,14 @@
 #include <string.h>
 #include <unistd.h>		/* crypt() */
 
+#include "sield-config.h"
+#include "sield-log.h"
+#include "sield-passwd.h"
+
 static const char *shadow_file = "/etc/shadow";
+
+static char *get_encrypted_user_passwd(const char *user);
+int passwd_check(const char *plain_txt_passwd);
 
 /*
  * Return encrypted password for given user from the shadow file.
@@ -52,16 +59,26 @@ static char *get_encrypted_user_passwd(const char *user)
 }
 
 /*
- * Return 1 if given user's password matches with
- * the one stored in the shadow file,
- * otherwise return 0.
+ * If SIELD password is defined explicitly, use that,
+ * otherwise use root password.
+ *
+ * So check given password against either SIELD password
+ * or the root password.
+ *
+ * Return 1 if password is correct, else return 0.
  */
-int passwd_check(const char *user, const char *passwd)
+int passwd_check(const char *plain_txt_passwd)
 {
-	if (! user || ! passwd) return 0;
+	char *encrypted_passwd_to_check_against =
+		get_sield_attr("passwd");
 
-	char *actual_encrypted_user_passwd = get_encrypted_user_passwd(user);
-	if (! actual_encrypted_user_passwd) return 0;
+	if (! encrypted_passwd_to_check_against) {
+		log_fn("SIELD password not set. Using root password.");
+		encrypted_passwd_to_check_against =
+			get_encrypted_user_passwd("root");
+	}
+
+	if (! encrypted_passwd_to_check_against) return 0;
 
 	/*
 	 * salt is a character string starting with the characters "$id$"
@@ -71,13 +88,14 @@ int passwd_check(const char *user, const char *passwd)
 	 *
 	 * Here actual encrypted password can act as salt.
 	 */
-	char *salt = actual_encrypted_user_passwd;
-	char *encrypted_passwd = crypt(passwd, salt);
+	char *salt = encrypted_passwd_to_check_against;
+	char *given_passwd_encrypted = crypt(plain_txt_passwd, salt);
 
-	int match = ! strcmp(actual_encrypted_user_passwd, encrypted_passwd);
+	int match = ! strcmp(encrypted_passwd_to_check_against,
+				given_passwd_encrypted);
 
-	free(actual_encrypted_user_passwd);
-	free(encrypted_passwd);
+	free(encrypted_passwd_to_check_against);
+	free(given_passwd_encrypted);
 
 	return match;
 }
