@@ -13,6 +13,7 @@ static const char *shadow_file = "/etc/shadow";
  */
 static char *get_encrypted_user_passwd(const char *user)
 {
+	if (! user) return NULL;
 	FILE *shadow_fp = fopen(shadow_file, "r");
 	if (! shadow_fp) {
 		log_fn("Unable to open shadow file.");
@@ -57,7 +58,10 @@ static char *get_encrypted_user_passwd(const char *user)
  */
 int passwd_check(const char *user, const char *passwd)
 {
+	if (! user || ! passwd) return 0;
+
 	char *actual_encrypted_user_passwd = get_encrypted_user_passwd(user);
+	if (! actual_encrypted_user_passwd) return 0;
 
 	/*
 	 * salt is a character string starting with the characters "$id$"
