@@ -45,16 +45,15 @@ static char *get_encrypted_user_passwd(const char *user)
 			char *encrypted_passwd = strsep(&line_copy, colon);
 			encrypted_passwd_copy = strdup(encrypted_passwd);
 		}
-
-		free(line);
-		line = NULL;
-		len = 0;
 	}
 
 	if (! encrypted_passwd_copy)
 		log_fn("Unable to find %s's encrypted password in shadow file.", user);
 
+	/* Clean up */
+	if (line) free(line);
 	fclose(shadow_fp);
+
 	return encrypted_passwd_copy;
 }
 
@@ -95,7 +94,18 @@ int passwd_check(const char *plain_txt_passwd)
 				given_passwd_encrypted);
 
 	free(encrypted_passwd_to_check_against);
-	free(given_passwd_encrypted);
+
+	/*
+	 * DO NOT FREE THE STRING RETURNED FROM crypt(3).
+	 * Time wasted: ~5hrs
+	 *
+	 * Take note of the following golden words from the crypt(3) man page.
+	 *
+	 * 	The return value points to static data whose content is
+	 * 	overwritten by each call.
+	 *
+	 * free(given_passwd_encrypted);
+	 */
 
 	return match;
 }
