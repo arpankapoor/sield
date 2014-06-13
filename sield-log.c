@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include "sield.h"
+#include "sield-log.h"
 
 static const char *LOG_FILE = "/var/log/sield.log";
 

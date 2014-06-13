@@ -5,7 +5,7 @@
 /*#include <locale.h>
 #include <unistd.h>
 #include <sys/mount.h> */
-#include "sield.h"
+#include "sield-log.h"
 
 /*********************** UDEV EXTENSIONS ****************************/
 
