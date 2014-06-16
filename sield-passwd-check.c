@@ -7,7 +7,7 @@
 
 #include "sield-config.h"
 #include "sield-log.h"
-#include "sield-passwd.h"
+#include "sield-passwd-check.h"
 
 static const char *shadow_file = "/etc/shadow";
 

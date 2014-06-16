@@ -8,7 +8,7 @@
 
 #include "sield-config.h"	/* set-sield-attr() */
 #include "sield-log.h"		/* log_fn() */
-#include "sield-passwd.h"	/* passwd_check() */
+#include "sield-passwd-check.h"	/* passwd_check() */
 
 static ssize_t get_passwd(char **plain_txt_passwd, size_t *n, FILE *stream);
 static char *generate_salt(void);
