@@ -16,7 +16,6 @@ void on_ok_button_clicked(GtkWidget *ok_button, gpointer *data)
 
 	if (passwd_check(plain_txt_passwd)) {
 		passwd_correct = 1;
-		//gtk_widget_hide(GTK_WIDGET(dialog));
 		gtk_widget_destroy(GTK_WIDGET(dialog));
 		gtk_main_quit();
 	} else {

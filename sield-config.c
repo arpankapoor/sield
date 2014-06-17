@@ -195,7 +195,8 @@ int set_sield_attr(const char *name, const char *value)
 		return 0;
 	}
 
-	fprintf(config_fp, "%s = %s\n", name, value);
+	/* Ensure that we are on a new line before writing. */
+	fprintf(config_fp, "\n%s = %s\n", name, value);
 
 	fclose(config_fp);
 	return 1;
