@@ -1,8 +1,16 @@
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <gtk/gtk.h>
+
 #include "sield-passwd-check.h"
 
 static const gchar *glade_file = "sield.glade";
 static int passwd_correct;
+void on_ok_button_clicked(GtkWidget *ok_button, gpointer *data);
+int ask_passwd_dialog(const char *manufacturer,
+	       const char *product);
 
 void on_ok_button_clicked(GtkWidget *ok_button, gpointer *data)
 {
@@ -44,8 +52,16 @@ int ask_passwd_dialog(const char *manufacturer,
 	GtkLabel *device_info_label = GTK_LABEL(gtk_builder_get_object(
 					builder, "device_info_label"));
 
-	const gchar *str = "Authorization needed to mount and share";
-	gtk_label_set_text(device_info_label, str);
+	/* Print device information in the dialog. */
+	char *dev_info = NULL;
+	if (asprintf(&dev_info, "%s %s inserted.\n"
+			"Authorization needed to mount and share.",
+			manufacturer, product) == -1) {
+		dev_info = strdup("USB block device inserted.\n"
+				"Authorization needed to mount and share.\n");
+	}
+	gtk_label_set_text(device_info_label, dev_info);
+	if (dev_info) free (dev_info);
 
 	/*
 	 * Pass passwd_entry and wrong_passwd_label to the "OK"
