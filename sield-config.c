@@ -15,6 +15,7 @@ static char *strip_whitespace(char *str);
 static char *seperate_line_into_name_value(
 		char **line, const char *delim);
 char *get_sield_attr(const char *name);
+long int get_sield_attr_int(const char *name);
 static int remove_sield_attr(const char *name);
 int set_sield_attr(const char *name, const char *value);
 
@@ -107,12 +108,37 @@ char *get_sield_attr(const char *name)
 		if (! strcmp(name_t, name) && value_t) value = strdup(value_t);
 	}
 
-	if (! value) log_fn("Cannot find configuration for %s.", name);
+	if (! value) log_fn("Cannot find configuration for \"%s\".", name);
 
 	/* Clean up */
 	if (line) free(line);
 	fclose(config_fp);
 
+	return value;
+}
+
+/*
+ * Convert value of given attribute to int.
+ */
+long int get_sield_attr_int(const char *name)
+{
+	char *value_str = get_sield_attr(name);
+
+	/* Return -1 if not present. */
+	if (! value_str) return -1;
+
+	char *endptr;
+
+	/* Convert to integer. */
+	long int value = strtol(value_str, &endptr, 10);
+
+	/* The configuration is not written properly. */
+	if (*endptr != '\0') {
+		log_fn("Non-integer characters in the config \"%s", name);
+		value = -1;
+	}
+
+	free(value_str);
 	return value;
 }
 
