@@ -169,8 +169,11 @@ static int remove_sield_attr(const char *name)
 	while (! value
 		&& getline(&line, &len, config_fp) != -1) {
 
-		/* Write empty lines and comments as is. */
-		if (line[0] == '#' || line[0] == '\n') {
+		/* Skip empty lines. */
+		if (line[0] == '\n') continue;
+
+		/* Write comments as is. */
+		if (line[0] == '#') {
 			fprintf(config_fp_new, "%s", line);
 			continue;
 		}
@@ -178,11 +181,13 @@ static int remove_sield_attr(const char *name)
 		char *line_ptr = line;
 
 		char *name_t = seperate_line_into_name_value(&line_ptr, delim);
+		char *value_t = line_ptr;
 
 		/* Skip lines that describe given attribute. */
 		if (! strcmp(name_t, name)) continue;
 
-		fprintf(config_fp_new, "%s", line);
+		if (name_t && value_t)
+			fprintf(config_fp_new, "\n%s = %s\n", name_t, value_t);
 	}
 
 	/* Clean up */
