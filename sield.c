@@ -23,7 +23,7 @@ int main(int argc, char **argv)
 
 	while (1) {
 		/* Check if enabled. */
-		if (! get_sield_attr_int("enable")) continue;
+		if (get_sield_attr_int("enable") == 0) continue;
 
 		/*
 		 * Receive udev_device for any "block" device which was
@@ -31,45 +31,56 @@ int main(int argc, char **argv)
 		 */
 		struct udev_device *device = receive_device_with_action(
 						monitor, "add");
+		if (! device) continue;
 
 		/* The device should be using USB */
 		struct udev_device *parent = udev_device_get_parent_with_subsystem_devtype(
 						device, "usb", "usb_device");
-
-		if (device && parent) {
-			log_block_device_info(device, parent);
-
-			/* Basic device info. */
-			const char *manufacturer =
-				udev_device_get_sysattr_value(parent, "manufacturer");
-
-			const char *product =
-				udev_device_get_sysattr_value(parent, "product");
-			/**********************/
-
-
-			/* If correct password is given. */
-			if (ask_passwd_dialog(manufacturer, product)) {
-
-				/* Check if mount should be read-only */
-				long int ro = get_sield_attr_int("readonly");
-				if (ro == -1) ro = 1;
-
-				/* Mount the device */
-				char *mount_pt = mount_device(device, ro);
-
-				if (mount_pt) {
-					log_fn("Mounted %s %s at %s as %s.",
-						manufacturer, product, mount_pt,
-						ro == 1 ? "read-only" : "read-write");
-
-					/* TODO: Scan the device. */
-				}
-			}
-
-			/* Parent will also be cleaned up */
+		if (! parent) {
 			udev_device_unref(device);
+			continue;
 		}
+
+		/* Log device information. */
+		log_block_device_info(device, parent);
+
+		/* Basic device info. */
+		const char *manufacturer =
+			udev_device_get_sysattr_value(parent, "manufacturer");
+
+		const char *product =
+			udev_device_get_sysattr_value(parent, "product");
+		/**********************/
+
+		/* If correct password is given. */
+		if (ask_passwd_dialog(manufacturer, product)) {
+
+			/* Check if mount should be read-only */
+			long int ro = get_sield_attr_int("readonly");
+			if (ro == -1) ro = 1;
+
+			/* Mount the device */
+			char *mount_pt = mount_device(device, ro);
+
+			if (mount_pt) {
+				log_fn("Mounted %s %s at %s as %s.",
+					manufacturer, product, mount_pt,
+					ro == 1 ? "read-only" : "read-write");
+
+				/* TODO: Scan the device. */
+				char *avpath = get_sield_attr("avpath");
+				if (! avpath) avpath = strdup("clamscan");
+
+				char *avopts = get_sield_attr("avopts");
+
+				int has_virus = system(avpath);
+
+				/* Clam AV returns 1 on detecting viruses. */
+			}
+		}
+
+		/* Parent will also be cleaned up */
+		udev_device_unref(device);
 	}
 
 	udev_monitor_unref(monitor);
