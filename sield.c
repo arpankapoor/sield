@@ -1,57 +1,12 @@
+#include <libudev.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <libudev.h>
-/*#include <locale.h>
-#include <unistd.h>
-#include <sys/mount.h> */
+
+#include "sield-config.h"
 #include "sield-log.h"
-
-/*********************** UDEV EXTENSIONS ****************************/
-
-/* Return a listening udev_monitor with given
- * event source, subsystem and device type. */
-struct udev_monitor *monitor_device_with_subsystem_devtype(
-	struct udev *udev, const char *event_source,
-	const char *subsystem, const char *devtype)
-{
-	struct udev_monitor *monitor = udev_monitor_new_from_netlink(
-					udev, event_source);
-	if (!monitor) {
-		log_fn("Failed to setup a new udev_monitor.");
-		return NULL;
-	}
-
-	int rt;
-	rt = udev_monitor_filter_add_match_subsystem_devtype(
-		monitor, subsystem, devtype);
-	if (rt != 0) {
-		log_fn("Failed to setup monitor filter.");
-		return NULL;
-	}
-
-	rt = udev_monitor_enable_receiving(monitor);
-	if (rt != 0) {
-		log_fn("Failed to bind udev_monitor to event source.");
-		return NULL;
-	}
-
-	return monitor;
-}
-
-/* Return a udev_device with given action, else return NULL */
-struct udev_device *receive_device_with_action(
-	struct udev_monitor *monitor, const char *action)
-{
-	/* udev_monitor_receive_device is NONBLOCKING */
-	struct udev_device *device = udev_monitor_receive_device(monitor);
-	if (device) {
-		const char *actual_action = udev_device_get_action(device);
-		if (strcmp(actual_action, action) == 0) return device;
-	}
-
-	return NULL;
-}
+#include "sield-mount.h"
+#include "sield-passwd-dialog.h"
+#include "sield-udev-helper.h"
 
 int main(int argc, char **argv)
 {
@@ -60,12 +15,20 @@ int main(int argc, char **argv)
 
 	/* Monitor block devices */
 	struct udev_monitor *monitor = monitor_device_with_subsystem_devtype(
-					udev, "udev", "block", NULL);
-	if (!monitor) exit(EXIT_FAILURE);
+					udev, "udev", "block", "partition");
+	if (! monitor) {
+		log_fn("Failed to initialize udev monitor. Quitting.");
+		exit(EXIT_FAILURE);
+	}
 
 	while (1) {
-		/* Receive udev_device for any "block" device which was
-		 * plugged in ("add"ed) to the system. */
+		/* Check if enabled. */
+		if (! get_sield_attr_int("enable")) continue;
+
+		/*
+		 * Receive udev_device for any "block" device which was
+		 * plugged in ("add"ed) to the system.
+		 */
 		struct udev_device *device = receive_device_with_action(
 						monitor, "add");
 
@@ -75,6 +38,34 @@ int main(int argc, char **argv)
 
 		if (device && parent) {
 			log_block_device_info(device, parent);
+
+			/* Basic device info. */
+			const char *manufacturer =
+				udev_device_get_sysattr_value(parent, "manufacturer");
+
+			const char *product =
+				udev_device_get_sysattr_value(parent, "product");
+			/**********************/
+
+
+			/* If correct password is given. */
+			if (ask_passwd_dialog(manufacturer, product)) {
+
+				/* Check if mount should be read-only */
+				long int ro = get_sield_attr_int("readonly");
+				if (ro == -1) ro = 1;
+
+				/* Mount the device */
+				char *mount_pt = mount_device(device, ro);
+
+				if (mount_pt) {
+					log_fn("Mounted %s %s at %s as %s.",
+						manufacturer, product, mount_pt,
+						ro == 1 ? "read-only" : "read-write");
+
+					/* TODO: Scan the device. */
+				}
+			}
 
 			/* Parent will also be cleaned up */
 			udev_device_unref(device);
