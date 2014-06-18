@@ -1,9 +1,11 @@
+#define _GNU_SOURCE		/* strdup() */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>		/* strdup() */
 #include <time.h>
-#include "sield-log.h"
 
-static const char *LOG_FILE = "/var/log/sield.log";
+#include "sield-log.h"
+#include "sield-config.h"
 
 static FILE *open_log_file(void);
 static void close_log_file(FILE *LOG_FP);
@@ -11,14 +13,17 @@ static void write_timestamp(FILE *fp);
 
 static FILE *open_log_file(void)
 {
+	char *LOG_FILE = get_sield_attr("logfile");
+	if (! LOG_FILE) LOG_FILE = strdup("/var/log/sield.log");
+
 	FILE *LOG_FP = fopen(LOG_FILE, "a");
-	if (!LOG_FP) {
+	if (! LOG_FP) {
 #ifdef DEBUG
-		fprintf(stderr, "Unable to open log file.\n");
+		fprintf(stderr, "Unable to open log file %s.\n", LOG_FILE);
 #endif
-		return NULL;
 	}
 
+	free(LOG_FILE);
 	return LOG_FP;
 }
 
