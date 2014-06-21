@@ -13,7 +13,7 @@ static void write_timestamp(FILE *fp);
 
 static FILE *open_log_file(void)
 {
-	char *LOG_FILE = get_sield_attr("logfile");
+	char *LOG_FILE = get_sield_attr_no_log("logfile");
 	if (! LOG_FILE) LOG_FILE = strdup("/var/log/sield.log");
 
 	FILE *LOG_FP = fopen(LOG_FILE, "a");
@@ -29,7 +29,8 @@ static FILE *open_log_file(void)
 
 static void close_log_file(FILE *LOG_FP)
 {
-	if (fclose(LOG_FP) != 0) {
+	/* fclose() returns 0 on success. */
+	if (fclose(LOG_FP)) {
 #ifdef DEBUG
 		fprintf(stderr, "Unable to close log file.\n");
 #endif
@@ -41,7 +42,7 @@ static void close_log_file(FILE *LOG_FP)
 #define TIME_STR_BUFFER 25
 static void write_timestamp(FILE *fp)
 {
-	if (!fp) return;
+	if (! fp) return;
 
 	time_t timer = time(NULL);
 	char current_time[TIME_STR_BUFFER];
@@ -54,7 +55,7 @@ static void write_timestamp(FILE *fp)
 void _log_fn(const char *format, ...)
 {
 	FILE *LOG_FP = open_log_file();
-	if(!LOG_FP) return;
+	if(! LOG_FP) return;
 
 	write_timestamp(LOG_FP);
 
@@ -69,7 +70,7 @@ void _log_fn(const char *format, ...)
 void log_block_device_info(struct udev_device *device,
 	struct udev_device *parent)
 {
-	if (!device || !parent) return;
+	if (! device || ! parent) return;
 	log_fn("%s identified.\n"
 		"  DEVICE INFORMATION\n"
 		"\tVendor=%s ProdID=%s\n"
@@ -93,7 +94,7 @@ void udev_custom_log_fn(struct udev *udev,
 	const char *format, va_list args)
 {
 	FILE *LOG_FP = open_log_file();
-	if (!LOG_FP) return;
+	if (! LOG_FP) return;
 
 	write_timestamp(LOG_FP);
 	fprintf(LOG_FP, "[libudev] [%s] ", fn);

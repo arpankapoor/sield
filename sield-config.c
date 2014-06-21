@@ -1,5 +1,6 @@
 #define _GNU_SOURCE		/* getline() */
 #define _BSD_SOURCE		/* strsep() */
+#include <errno.h>		/* strerror() */
 #include <stdio.h>
 #include <stdlib.h>		/* free() */
 #include <string.h>		/* strsep(), strcmp() */
@@ -14,7 +15,9 @@ static const char *config_file_new = "/etc/sield.conf.new";
 static char *strip_whitespace(char *str);
 static char *seperate_line_into_name_value(
 		char **line, const char *delim);
+static char *get_sield_attr_base(const char *name, int log);
 char *get_sield_attr(const char *name);
+char *get_sield_attr_no_log(const char *name);
 long int get_sield_attr_int(const char *name);
 static int remove_sield_attr(const char *name);
 int set_sield_attr(const char *name, const char *value);
@@ -77,14 +80,19 @@ static char *seperate_line_into_name_value(
  * Return attribute with given name if present,
  * else return NULL.
  *
+ * Log any errors if "log" is non-zero.
+ *
  * If there are more than 1 lines with given attribute name,
  * the first among them will be used.
  */
-char *get_sield_attr(const char *name)
+static char *get_sield_attr_base(const char *name, int log)
 {
 	FILE *config_fp = fopen(config_file, "r");
 	if (! config_fp) {
-		log_fn("Unable to open config file for reading.");
+		if (log) {
+			log_fn("fopen: %s", strerror(errno));
+			log_fn("Unable to open config file for reading.");
+		}
 		return NULL;
 	}
 
@@ -108,13 +116,29 @@ char *get_sield_attr(const char *name)
 		if (! strcmp(name_t, name) && value_t) value = strdup(value_t);
 	}
 
-	if (! value) log_fn("Cannot find configuration for \"%s\".", name);
+	if (! value && log) log_fn("Cannot find configuration for \"%s\".", name);
 
 	/* Clean up */
 	if (line) free(line);
 	fclose(config_fp);
 
 	return value;
+}
+
+/*
+ * Get attribute value without logging.
+ */
+char *get_sield_attr_no_log(const char *name)
+{
+	return get_sield_attr_base(name, 0);
+}
+
+/*
+ * Logging is turned on.
+ */
+char *get_sield_attr(const char *name)
+{
+	return get_sield_attr_base(name, 1);
 }
 
 /*
