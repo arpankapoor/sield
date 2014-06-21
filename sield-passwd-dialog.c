@@ -5,10 +5,12 @@
 #include <gtk/gtk.h>
 
 #include "sield-passwd-check.h"
+#include "sield-passwd-dialog.h"
 
 static const gchar *glade_file = "sield.glade";
 static int passwd_correct;
 void on_ok_button_clicked(GtkWidget *ok_button, gpointer *data);
+void on_cancel_button_clicked(GtkWidget *cancel_button, gpointer *data);
 int ask_passwd_dialog(const char *manufacturer,
 	       const char *product);
 
@@ -31,6 +33,16 @@ void on_ok_button_clicked(GtkWidget *ok_button, gpointer *data)
 		gtk_entry_set_text(passwd_entry, "");
 		gtk_widget_show(GTK_WIDGET(wrong_passwd_label));
 	}
+}
+
+void on_cancel_button_clicked(GtkWidget *cancel_button, gpointer *data)
+{
+	GObject *dialog = G_OBJECT(data);
+
+	passwd_correct = 0;
+
+	gtk_widget_destroy(GTK_WIDGET(dialog));
+	gtk_main_quit();
 }
 
 /*
