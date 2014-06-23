@@ -7,7 +7,8 @@ GTK_LDFLAGS=`pkg-config --libs gtk+-3.0` -rdynamic
 
 all: sield passwd-sield
 
-sield: sield.o sield-config.o sield-log.o sield-mount.o sield-passwd-check.o sield-passwd-dialog.o sield-udev-helper.o
+sield: sield.o sield-config.o sield-daemon.o sield-log.o sield-mount.o \
+	sield-passwd-check.o sield-passwd-dialog.o sield-udev-helper.o
 	$(CC) $(CFLAGS) $(LUDEV) $(LCRYPT) $(GTK_LDFLAGS) -o $@ $^
 
 passwd-sield: sield-config.o sield-log.o sield-passwd-update.o sield-passwd-check.o
@@ -15,6 +16,9 @@ passwd-sield: sield-config.o sield-log.o sield-passwd-update.o sield-passwd-chec
 
 sield-passwd-dialog.o: sield-passwd-dialog.c
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -c -o $@ $^
+
+install:
+	cp 999-sield-prevent-automount.rules /etc/udev/rules.d/
 
 clean:
 	rm -f *.o
