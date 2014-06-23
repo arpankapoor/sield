@@ -60,8 +60,8 @@ char *mount_device(struct udev_device *device, int ro)
 	 * Readable and writable by the owner.
 	 */
 	if (mkdir(target, S_IRUSR | S_IWUSR) == -1 && errno != EEXIST) {
-		log_fn("%s", strerror(errno));
-		log_fn("Cannot create the directory: %s", target);
+		log_fn("Cannot create the directory: \"%s\". %s",
+			target, strerror(errno));
 		free(target);
 		return NULL;
 	}
@@ -69,12 +69,11 @@ char *mount_device(struct udev_device *device, int ro)
 	/* Default is read-only. */
 	unsigned long mountflags = MS_RDONLY;
 
-	/* Explicitly mount as R/W */
 	if (ro == 0) mountflags = 0;
 
 	/* MOUNT */
 	if (mount(devnode, target, fs_type, mountflags, NULL) == -1) {
-		log_fn("Unable to mount device: %s", strerror(errno));
+		log_fn("Unable to mount %s: %s", devnode, strerror(errno));
 		free(target);
 		return NULL;
 	}

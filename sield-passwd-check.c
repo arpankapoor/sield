@@ -1,9 +1,7 @@
 #define _GNU_SOURCE		/* getline(), strdup(), crypt() */
-#define _BSD_SOURCE		/* strsep() */
 #include <errno.h>
 #include <pwd.h>
 #include <shadow.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
