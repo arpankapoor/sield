@@ -1,8 +1,10 @@
 #include <libudev.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "sield-config.h"
+#include "sield-daemon.h"
 #include "sield-log.h"
 #include "sield-mount.h"
 #include "sield-passwd-dialog.h"
@@ -10,6 +12,11 @@
 
 int main(int argc, char **argv)
 {
+	if (become_daemon() == -1) {
+		log_fn("Daemon creation failed.");
+		exit(EXIT_FAILURE);
+	}
+
 	struct udev *udev = udev_new();
 	udev_set_log_fn(udev, udev_custom_log_fn);
 
@@ -31,7 +38,10 @@ int main(int argc, char **argv)
 		 */
 		struct udev_device *device = receive_device_with_action(
 						monitor, "add");
-		if (! device) continue;
+		if (! device) {
+			sleep(1);
+			continue;
+		}
 
 		/* The device should be using USB */
 		struct udev_device *parent = udev_device_get_parent_with_subsystem_devtype(
@@ -45,6 +55,9 @@ int main(int argc, char **argv)
 		log_block_device_info(device, parent);
 
 		/* Basic device info. */
+		const char *devnode =
+			udev_device_get_devnode(device);
+
 		const char *manufacturer =
 			udev_device_get_sysattr_value(parent, "manufacturer");
 
@@ -63,19 +76,11 @@ int main(int argc, char **argv)
 			char *mount_pt = mount_device(device, ro);
 
 			if (mount_pt) {
-				log_fn("Mounted %s %s at %s as %s.",
-					manufacturer, product, mount_pt,
+				log_fn("Mounted %s (%s %s) at %s as %s.",
+					devnode, manufacturer, product, mount_pt,
 					ro == 1 ? "read-only" : "read-write");
 
 				/* TODO: Scan the device. */
-				char *avpath = get_sield_attr("avpath");
-				if (! avpath) avpath = strdup("clamscan");
-
-				char *avopts = get_sield_attr("avopts");
-
-				int has_virus = system(avpath);
-
-				/* Clam AV returns 1 on detecting viruses. */
 			}
 		}
 
