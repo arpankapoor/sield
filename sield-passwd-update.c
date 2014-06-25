@@ -1,4 +1,5 @@
 #define _GNU_SOURCE		/* getline(), crypt() */
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>		/* rand(), srand(), free() */
 #include <string.h>		/* strcmp() */
@@ -9,6 +10,8 @@
 #include "sield-config.h"	/* set-sield-attr() */
 #include "sield-log.h"		/* log_fn() */
 #include "sield-passwd-check.h"	/* passwd_check() */
+
+static const char *PASSWD_FILE = "/etc/sield.passwd";
 
 static ssize_t get_passwd(char **plain_txt_passwd, size_t *n, FILE *stream);
 static char *generate_salt(void);
@@ -89,6 +92,8 @@ static char *generate_salt(void)
  * Update password.
  *
  * Encrypt using SHA-512 with a 16 byte salt.
+ *
+ * Return 1 on success, else return 0.
  */
 static int set_passwd(const char *plain_txt_passwd)
 {
@@ -96,8 +101,19 @@ static int set_passwd(const char *plain_txt_passwd)
 	char *salt = generate_salt();
 	char *encrypted_passwd = crypt(plain_txt_passwd, salt);
 
-	int rc = set_sield_attr("passwd", encrypted_passwd);
+	FILE *passwd_fp = fopen(PASSWD_FILE, "w");
+	if (! passwd_fp) {
+		log_fn("Failed to open password file (%s): %s",
+			PASSWD_FILE, strerror(errno));
+		return 0;
+	}
 
+	if (fprintf(passwd_fp, "%s\n", encrypted_passwd) < 0) {
+		log_fn("Failed to write new password to %s", PASSWD_FILE);
+		return 0;
+	}
+
+	fclose(passwd_fp);
 	free(salt);
 	/*
 	 * DON'T FREE RETURN VALUE OF crypt(3).
@@ -105,7 +121,24 @@ static int set_passwd(const char *plain_txt_passwd)
 	 * free(encrypted_passwd);
 	 */
 
-	return rc;
+
+	/*
+	 * Password file should be readable
+	 * and writable only by the superuser.
+	 */
+	if (chown(PASSWD_FILE, 0, 0) == -1) {
+		log_fn("Unable to change owner of password file (%s) to superuser.");
+		return 0;
+	}
+
+	if (chmod(PASSWD_FILE, S_IRUSR | S_IWUSR) == -1) {
+		log_fn("Unable to change password file (%s) permission bits. %s",
+			PASSWD_FILE, strerror(errno));
+		remove(PASSWD_FILE);
+		return 0;
+	}
+
+	return 1;
 }
 
 int main(int argc, char **argv)
@@ -151,7 +184,7 @@ int main(int argc, char **argv)
 	} else {
 		if (set_passwd(new_plain_txt_passwd_1)) {
 			printf("\nPassword updated successfully.\n");
-			log_fn("Password updated.\n");
+			log_fn("Password updated.");
 		} else {
 			fprintf(stderr, "\nFailed to change password.\n");
 		}

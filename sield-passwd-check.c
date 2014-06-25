@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <pwd.h>
 #include <shadow.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -13,6 +14,7 @@
 
 
 static char *get_encrypted_user_passwd(uid_t uid);
+static char *get_sield_passwd(void);
 int passwd_check(const char *plain_txt_passwd);
 
 /*
@@ -60,6 +62,33 @@ static char *get_encrypted_user_passwd(uid_t uid)
 }
 
 /*
+ * Return the application password stored in
+ * PASSWD_FILE.
+ *
+ * If PASSWD_FILE is not present, return NULL.
+ */
+static char *get_sield_passwd(void)
+{
+	const char *PASSWD_FILE = "/etc/sield.passwd";
+
+	FILE *passwd_fp = fopen(PASSWD_FILE, "r");
+	if (! passwd_fp) return NULL;
+
+	char *encrypted_passwd = NULL;
+	size_t len = 0;
+
+	ssize_t read = getline(&encrypted_passwd, &len, passwd_fp);
+	if (read == -1) return NULL;
+
+	fclose(passwd_fp);
+
+	/* Remove newline. */
+	encrypted_passwd[read-1] = '\0';
+
+	return encrypted_passwd;
+}
+
+/*
  * If SIELD password is defined explicitly, use that,
  * otherwise use root password.
  *
@@ -70,8 +99,7 @@ static char *get_encrypted_user_passwd(uid_t uid)
  */
 int passwd_check(const char *plain_txt_passwd)
 {
-	char *encrypted_passwd_to_check_against =
-		get_sield_attr("passwd");
+	char *encrypted_passwd_to_check_against = get_sield_passwd();
 
 	if (! encrypted_passwd_to_check_against) {
 		log_fn("SIELD password not set. Using superuser password.");
