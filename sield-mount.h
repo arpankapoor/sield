@@ -8,4 +8,7 @@
  */
 char *mount_device(struct udev_device *device, int ro);
 
+/* Unmount */
+int unmount(const char *target);
+
 #endif

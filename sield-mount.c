@@ -13,6 +13,7 @@
 
 static char *get_mount_point(struct udev_device *device);
 char *mount_device(struct udev_device *device, int ro);
+int unmount(const char *target);
 
 static char *get_mount_point(struct udev_device *device)
 {
@@ -79,4 +80,15 @@ char *mount_device(struct udev_device *device, int ro)
 	}
 
 	return target;
+}
+
+/* Wrapper for umount. */
+int unmount(const char *target)
+{
+	if (umount(target) == -1) {
+		log_fn("Unable to unmount %s: %s", target, strerror(errno));
+		return -1;
+	}
+
+	return 0;
 }
