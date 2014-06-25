@@ -1,8 +1,10 @@
+#include <clamav.h>
 #include <libudev.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "sield-av.h"
 #include "sield-config.h"
 #include "sield-daemon.h"
 #include "sield-log.h"
@@ -13,7 +15,7 @@
 int main(int argc, char **argv)
 {
 	if (become_daemon() == -1) {
-		log_fn("Daemon creation failed.");
+		log_fn("Daemon creation failed. Quitting.");
 		exit(EXIT_FAILURE);
 	}
 
@@ -28,9 +30,19 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
+	int ret;
+	if ((ret = cl_init(CL_INIT_DEFAULT)) != CL_SUCCESS) {
+		log_fn("libclamav: cl_init(): %s", cl_strerror(ret));
+		log_fn("Unable to initialize clamav. Quitting.");
+		exit(EXIT_FAILURE);
+	}
+
 	while (1) {
 		/* Check if enabled. */
-		if (get_sield_attr_int("enable") == 0) continue;
+		if (get_sield_attr_int("enable") == 0) {
+			sleep(1);
+			continue;
+		}
 
 		/*
 		 * Receive udev_device for any "block" device which was
@@ -54,7 +66,9 @@ int main(int argc, char **argv)
 		/* Log device information. */
 		log_block_device_info(device, parent);
 
-		/* Basic device info. */
+		/***********************
+		    Basic device info. 
+		 ***********************/
 		const char *devnode =
 			udev_device_get_devnode(device);
 
@@ -63,25 +77,60 @@ int main(int argc, char **argv)
 
 		const char *product =
 			udev_device_get_sysattr_value(parent, "product");
+
 		/**********************/
 
-		/* If correct password is given. */
-		if (ask_passwd_dialog(manufacturer, product)) {
+		/* Incorrect password is given. */
+		if (! ask_passwd_dialog(manufacturer, product)) {
+			udev_device_unref(device);
+			continue;
+		}
 
-			/* Check if mount should be read-only */
-			long int ro = get_sield_attr_int("readonly");
-			if (ro == -1) ro = 1;
+		/* Mount as read-only for virus scan */
+		char *rd_only_mtpt = mount_device(device, 1);
+		if (rd_only_mtpt) {
+			log_fn("Mounted %s (%s %s) at %s for virus scan.",
+				devnode, manufacturer, product, rd_only_mtpt);
+		} else {
+			udev_device_unref(device);
+			continue;
+		}
 
-			/* Mount the device */
-			char *mount_pt = mount_device(device, ro);
+		/* Scan the device for viruses. */
+		int av_result = virus_scan(rd_only_mtpt);
 
-			if (mount_pt) {
-				log_fn("Mounted %s (%s %s) at %s as %s.",
-					devnode, manufacturer, product, mount_pt,
-					ro == 1 ? "read-only" : "read-write");
+		/* Unmount*/
+		if (unmount(rd_only_mtpt) == -1) {
+			udev_device_unref(device);
+			free(rd_only_mtpt);
+			continue;
+		} else {
+			log_fn("Unmounted %s", rd_only_mtpt);
+			free(rd_only_mtpt);
+		}
 
-				/* TODO: Scan the device. */
-			}
+		/*
+		 * Either
+		 * 1. Virus(es) found.
+		 * 	OR
+		 * 2. Error(s) occurred.
+		 */
+		if (av_result != 0) {
+			udev_device_unref(device);
+			continue;
+		}
+
+		/* Check if mount should be read-only */
+		long int ro = get_sield_attr_int("readonly");
+		if (ro == -1) ro = 1;
+
+		/* Mount the device */
+		char *mount_pt = mount_device(device, ro);
+
+		if (mount_pt) {
+			log_fn("Mounted %s (%s %s) at %s as %s.",
+				devnode, manufacturer, product, mount_pt,
+				ro == 1 ? "read-only" : "read-write");
 		}
 
 		/* Parent will also be cleaned up */

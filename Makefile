@@ -4,12 +4,13 @@ LCRYPT=-lcrypt
 CFLAGS=-Wall
 GTK_CFLAGS=`pkg-config --cflags gtk+-3.0`
 GTK_LDFLAGS=`pkg-config --libs gtk+-3.0` -rdynamic
+CLAMAV=-lclamav
 
 all: sield passwd-sield
 
-sield: sield.o sield-config.o sield-daemon.o sield-log.o sield-mount.o \
+sield: sield.o sield-av.o sield-config.o sield-daemon.o sield-log.o sield-mount.o \
 	sield-passwd-check.o sield-passwd-dialog.o sield-udev-helper.o
-	$(CC) $(CFLAGS) $(LUDEV) $(LCRYPT) $(GTK_LDFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) $(LUDEV) $(LCRYPT) $(GTK_LDFLAGS) $(CLAMAV) -o $@ $^
 
 passwd-sield: sield-config.o sield-log.o sield-passwd-update.o sield-passwd-check.o
 	$(CC) $(CFLAGS) $(LUDEV) $(LCRYPT) -o $@ $^
