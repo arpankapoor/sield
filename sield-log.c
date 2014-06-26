@@ -48,7 +48,7 @@ static void write_timestamp(FILE *fp)
 	char current_time[TIME_STR_BUFFER];
 	strftime(current_time, TIME_STR_BUFFER, "[%F %T] ", localtime(&timer));
 
-	fprintf(fp, current_time);
+	fprintf(fp, "%s", current_time);
 }
 
 /* Write message along with a newline to the LOG_FILE */
