@@ -1,4 +1,3 @@
-#include <clamav.h>
 #include <libudev.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,6 +10,70 @@
 #include "sield-mount.h"
 #include "sield-passwd-dialog.h"
 #include "sield-udev-helper.h"
+
+static void handle_device(struct udev_device *device,
+		struct udev_device *parent)
+{
+	/* Log device information. */
+	log_block_device_info(device, parent);
+
+	/***********************
+	    Basic device info.
+	 ***********************/
+	const char *devnode =
+		udev_device_get_devnode(device);
+
+	const char *manufacturer =
+		udev_device_get_sysattr_value(parent, "manufacturer");
+
+	const char *product =
+		udev_device_get_sysattr_value(parent, "product");
+
+	/**********************/
+
+	/* Incorrect password is given. */
+	if (! ask_passwd_dialog(manufacturer, product)) return;
+
+	/* Mount as read-only for virus scan */
+	char *rd_only_mtpt = mount_device(device, 1);
+	if (rd_only_mtpt)
+		log_fn("Mounted %s (%s %s) at %s as read-only for virus scan.",
+			devnode, manufacturer, product, rd_only_mtpt);
+	else return;
+
+	/* Scan the device for viruses. */
+	int av_result = virus_scan(rd_only_mtpt);
+
+	/* Unmount*/
+	if (unmount(rd_only_mtpt) == -1) {
+		free(rd_only_mtpt);
+		return;
+	} else {
+		log_fn("Unmounted %s", rd_only_mtpt);
+		free(rd_only_mtpt);
+	}
+
+	/*
+	 * Either
+	 * 1. Virus(es) found.
+	 * 	OR
+	 * 2. Error(s) occurred.
+	 */
+	if (av_result != 0) return;
+
+	/* Check if mount should be read-only */
+	long int ro = get_sield_attr_int("readonly");
+	if (ro == -1) ro = 1;
+
+	/* Mount the device */
+	char *mount_pt = mount_device(device, ro);
+
+	if (mount_pt) {
+		log_fn("Mounted %s (%s %s) at %s as %s.",
+			devnode, manufacturer, product, mount_pt,
+			ro == 1 ? "read-only" : "read-write");
+	}
+}
 
 int main(int argc, char **argv)
 {
@@ -27,13 +90,6 @@ int main(int argc, char **argv)
 					udev, "udev", "block", "partition");
 	if (! monitor) {
 		log_fn("Failed to initialize udev monitor. Quitting.");
-		exit(EXIT_FAILURE);
-	}
-
-	int ret;
-	if ((ret = cl_init(CL_INIT_DEFAULT)) != CL_SUCCESS) {
-		log_fn("libclamav: cl_init(): %s", cl_strerror(ret));
-		log_fn("Unable to initialize clamav. Quitting.");
 		exit(EXIT_FAILURE);
 	}
 
@@ -60,78 +116,12 @@ int main(int argc, char **argv)
 						device, "usb", "usb_device");
 		if (! parent) {
 			udev_device_unref(device);
+			sleep(1);
 			continue;
 		}
 
-		/* Log device information. */
-		log_block_device_info(device, parent);
-
-		/***********************
-		    Basic device info. 
-		 ***********************/
-		const char *devnode =
-			udev_device_get_devnode(device);
-
-		const char *manufacturer =
-			udev_device_get_sysattr_value(parent, "manufacturer");
-
-		const char *product =
-			udev_device_get_sysattr_value(parent, "product");
-
-		/**********************/
-
-		/* Incorrect password is given. */
-		if (! ask_passwd_dialog(manufacturer, product)) {
-			udev_device_unref(device);
-			continue;
-		}
-
-		/* Mount as read-only for virus scan */
-		char *rd_only_mtpt = mount_device(device, 1);
-		if (rd_only_mtpt) {
-			log_fn("Mounted %s (%s %s) at %s for virus scan.",
-				devnode, manufacturer, product, rd_only_mtpt);
-		} else {
-			udev_device_unref(device);
-			continue;
-		}
-
-		/* Scan the device for viruses. */
-		int av_result = virus_scan(rd_only_mtpt);
-
-		/* Unmount*/
-		if (unmount(rd_only_mtpt) == -1) {
-			udev_device_unref(device);
-			free(rd_only_mtpt);
-			continue;
-		} else {
-			log_fn("Unmounted %s", rd_only_mtpt);
-			free(rd_only_mtpt);
-		}
-
-		/*
-		 * Either
-		 * 1. Virus(es) found.
-		 * 	OR
-		 * 2. Error(s) occurred.
-		 */
-		if (av_result != 0) {
-			udev_device_unref(device);
-			continue;
-		}
-
-		/* Check if mount should be read-only */
-		long int ro = get_sield_attr_int("readonly");
-		if (ro == -1) ro = 1;
-
-		/* Mount the device */
-		char *mount_pt = mount_device(device, ro);
-
-		if (mount_pt) {
-			log_fn("Mounted %s (%s %s) at %s as %s.",
-				devnode, manufacturer, product, mount_pt,
-				ro == 1 ? "read-only" : "read-write");
-		}
+		/* Take care of the device. */
+		handle_device(device, parent);
 
 		/* Parent will also be cleaned up */
 		udev_device_unref(device);
