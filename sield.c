@@ -1,6 +1,7 @@
 #include <libudev.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "sield-av.h"
@@ -91,6 +92,32 @@ int main(int argc, char **argv)
 	if (! monitor) {
 		log_fn("Failed to initialize udev monitor. Quitting.");
 		exit(EXIT_FAILURE);
+	}
+
+	/* List and handle all devices that are already plugged in. */
+	struct udev_enumerate *enumerate = udev_enumerate_new(udev);
+	udev_enumerate_add_match_subsystem(enumerate, "block");
+	udev_enumerate_scan_devices(enumerate);
+	struct udev_list_entry *devices = udev_enumerate_get_list_entry(enumerate);
+	struct udev_list_entry *dev_list_entry;
+
+	udev_list_entry_foreach(dev_list_entry, devices) {
+		const char *path = udev_list_entry_get_name(dev_list_entry);
+		struct udev_device *dev = udev_device_new_from_syspath(udev, path);
+
+		const char *devtype = udev_device_get_devtype(dev);
+
+		/* Ignore devices other than partitions. */
+		if (strcmp(devtype, "partition")) continue;
+
+		/* Ensure it is a usb device. */
+		struct udev_device *parent = udev_device_get_parent_with_subsystem_devtype(
+				dev, "usb", "usb_device");
+		if (! parent) continue;
+
+		handle_device(dev, parent);
+
+		udev_device_unref(dev);
 	}
 
 	while (1) {

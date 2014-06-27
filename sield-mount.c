@@ -29,7 +29,7 @@ static char *get_mount_point(struct udev_device *device)
 		if (! fs_label) {
 			target = strdup("/mnt/sield_usb");
 			log_fn("Cannot find device filesystem label."
-				"Using default mount point /mnt/sield_usb.");
+				"Using default mount point \"/mnt/sield_usb\".");
 		} else if (asprintf(&target, "/mnt/%s", fs_label) == -1) {
 			target = strdup("/mnt/sield_usb");
 		}
