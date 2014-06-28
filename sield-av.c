@@ -21,7 +21,7 @@ int virus_scan(const char *dir)
 {
 	char *cmd = NULL;
 
-	char *av_logfile = get_sield_attr("av_logfile");
+	char *av_logfile = get_sield_attr("av log file");
 	if (! av_logfile) av_logfile = strdup(AV_LOGFILE);
 
 	if (asprintf(&cmd, "%s -r -l %s %s",

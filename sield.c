@@ -10,6 +10,7 @@
 #include "sield-log.h"
 #include "sield-mount.h"
 #include "sield-passwd-dialog.h"
+#include "sield-share.h"
 #include "sield-udev-helper.h"
 
 static void handle_device(struct udev_device *device,
@@ -36,6 +37,7 @@ static void handle_device(struct udev_device *device,
 	if (! ask_passwd_dialog(manufacturer, product)) return;
 
 	/* Mount as read-only for virus scan */
+	/* TODO: Mount at a temporary directory */
 	char *rd_only_mtpt = mount_device(device, 1);
 	if (rd_only_mtpt)
 		log_fn("Mounted %s (%s %s) at %s as read-only for virus scan.",
@@ -63,7 +65,7 @@ static void handle_device(struct udev_device *device,
 	if (av_result != 0) return;
 
 	/* Check if mount should be read-only */
-	long int ro = get_sield_attr_int("readonly");
+	long int ro = get_sield_attr_int("read only");
 	if (ro == -1) ro = 1;
 
 	/* Mount the device */
@@ -73,6 +75,11 @@ static void handle_device(struct udev_device *device,
 		log_fn("Mounted %s (%s %s) at %s as %s.",
 			devnode, manufacturer, product, mount_pt,
 			ro == 1 ? "read-only" : "read-write");
+
+		if (samba_share(mount_pt))
+			log_fn("Shared %s on the samba network.", mount_pt);
+
+		free(mount_pt);
 	}
 }
 

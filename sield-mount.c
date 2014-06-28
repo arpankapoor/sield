@@ -18,7 +18,7 @@ int unmount(const char *target);
 static char *get_mount_point(struct udev_device *device)
 {
 	/* If mount point is given in the config file. */
-	char *target = get_sield_attr("mountpoint");
+	char *target = get_sield_attr("mount point");
 
 	if (! target) {
 		/* Check if device label is defined. */
