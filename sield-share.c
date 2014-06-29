@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
@@ -10,16 +11,17 @@ static const char *SMB_FILE = "/etc/samba/smb.conf";
 static const char *SMB_FILE_BAK = "/etc/samba/smb.conf.bak";
 static int backup_smb_file(void);
 static int write_smbconf(const char *path);
-static int restart_samba(void);
-
+static int restart_daemon(const char *name);
+static int restart_daemon_alt(const char *name);
 /*
  * Write custom smb.conf file
  * and restart samba daemon.
  */
 int samba_share(const char *path)
 {
-	if (write_smbconf(path) == 1) return restart_samba();
-	else return 0;
+	return write_smbconf(path)
+		&& restart_daemon("smbd")
+		&& restart_daemon("nmbd");
 }
 
 /*
@@ -90,44 +92,63 @@ static int write_smbconf(const char *path)
 }
 
 /*
- * Restart the samba daemon.
+ * Restart the given daemon.
  *
  * Return 1 on success, else return 0.
  */
-static int restart_samba(void)
+static int restart_daemon(const char *name)
 {
 	/*
 	 * Try sending a SIGHUP to the running process.
-	 * (find smbd.pid in /run)
+	 * (find $name.pid in /run)
 	 *
-	 * if this fails, run "smbd restart".
+	 * if this fails, run "$name restart".
 	 */
 
-	const char *pid_file = "/run/smbd.pid";
+	char *pid_file = NULL;
+	if (asprintf(&pid_file, "/run/%s.pid", name) == -1) return 0;
 
 	FILE *pid_fp = fopen(pid_file, "r");
 	if (! pid_fp) {
 		log_fn("Can't open \"%s\" for reading.", pid_file);
-		return 0;
+		return restart_daemon_alt(name);
 	}
+
+	free(pid_file);
 
 	pid_t pid = 0;
 	if (fscanf(pid_fp, "%d", &pid) != 1) {
 		log_fn("Can't read pid from \"%s\".", pid_file);
-		return 0;
+		return restart_daemon_alt(name);
 	}
 
 	if (kill(pid, SIGHUP) == -1) {
 		log_fn("Couldn't send SIGHUP to PID %d: %s", pid, strerror(errno));
-		if (system("smbd restart") != 0) {
-			log_fn("Failed to restart smbd.");
-			return 0;
-		} else {
-			log_fn("Restarted smbd.");
-			return 1;
-		}
+		return restart_daemon_alt(name);
 	} else {
 		log_fn("Sent SIGHUP to PID %d.", pid);
+		return 1;
+	}
+}
+
+/*
+ * Restart smbd from sh
+ */
+static int restart_daemon_alt(const char *name)
+{
+	char *cmd = NULL;
+	if (asprintf(&cmd, "%s restart", name) == -1) {
+		log_fn("memory error");
+		return 0;
+	}
+
+	if (system(cmd) != 0) {
+		log_fn("Failed to restart %s.", name);
+		free(cmd);
+		return 0;
+	} else {
+		log_fn("Restarted %s.", name);
+		free(cmd);
 		return 1;
 	}
 }
