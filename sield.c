@@ -79,6 +79,11 @@ static void handle_device(struct udev_device *device,
 		if (samba_share(mount_pt))
 			log_fn("Shared %s on the samba network.", mount_pt);
 
+		if (has_unmounted(mount_pt)) {
+			log_fn("%s was unmounted.", devnode);
+			if (restore_smb_conf()) log_fn("Restored smb.conf");
+		}
+
 		free(mount_pt);
 	}
 }

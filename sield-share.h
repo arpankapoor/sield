@@ -3,4 +3,6 @@
 
 int samba_share(const char *path);
 
+int restore_smb_conf(void);
+
 #endif

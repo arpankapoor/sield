@@ -13,6 +13,7 @@ static int backup_smb_file(void);
 static int write_smbconf(const char *path);
 static int restart_daemon(const char *name);
 static int restart_daemon_alt(const char *name);
+
 /*
  * Write custom smb.conf file
  * and restart samba daemon.
@@ -22,6 +23,17 @@ int samba_share(const char *path)
 	return write_smbconf(path)
 		&& restart_daemon("smbd")
 		&& restart_daemon("nmbd");
+}
+
+int restore_smb_conf(void)
+{
+	if (rename(SMB_FILE_BAK, SMB_FILE) == -1) {
+		log_fn("%s", strerror(errno));
+		log_fn("Unable to restore smb.conf");
+		return 0;
+	}
+
+	return 1;
 }
 
 /*
@@ -126,7 +138,7 @@ static int restart_daemon(const char *name)
 		log_fn("Couldn't send SIGHUP to PID %d: %s", pid, strerror(errno));
 		return restart_daemon_alt(name);
 	} else {
-		log_fn("Sent SIGHUP to PID %d.", pid);
+		log_fn("Sent SIGHUP to PID %d (%s).", pid, name);
 		return 1;
 	}
 }

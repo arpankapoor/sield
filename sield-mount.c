@@ -1,6 +1,7 @@
 #define _GNU_SOURCE		/* asprintf() */
 #include <errno.h>		/* errno */
 #include <libudev.h>
+#include <poll.h>
 #include <stdio.h>		/* asprintf() */
 #include <stdlib.h>		/* free() */
 #include <string.h>		/* strdup() */
@@ -11,9 +12,13 @@
 #include "sield-log.h"
 #include "sield-mount.h"
 
+static const char *PROC_MOUNTS = "/proc/mounts";
+
 static char *get_mount_point(struct udev_device *device);
 char *mount_device(struct udev_device *device, int ro);
 int unmount(const char *target);
+static int is_mounted(const char *devpath, FILE *mounts);
+int has_unmounted(const char *devpath);
 
 static char *get_mount_point(struct udev_device *device)
 {
@@ -91,4 +96,65 @@ int unmount(const char *target)
 	}
 
 	return 0;
+}
+
+/*
+ * Check if given device is present in the
+ * PROC_MOUNTS file.
+ *
+ * Return 1 if present, else return 0.
+ */
+static int is_mounted(const char *devpath, FILE *mounts)
+{
+	char *line = NULL;
+	size_t len = 0;
+	int ret = 1;
+
+	while (getline(&line, &len, mounts) != -1) {
+		char *device = NULL;
+
+		/* %m modifier for dynamic string allocation. */
+		sscanf(line, "%ms", &device);
+		ret = strcmp(device, devpath);
+		if (device) free(device);
+
+		if (ret == 0) break;
+	}
+
+	if (line) free(line);
+	return ret == 0;
+}
+
+/*
+ * Waits for the user to unmount given device.
+ *
+ * Return 1 when given device is unmounted, else return 0.
+ */
+int has_unmounted(const char *devpath)
+{
+	FILE *f = fopen(PROC_MOUNTS, "r");
+	if (! f) {
+		log_fn("Cannot open \"%s\" for reading.", PROC_MOUNTS);
+		return 0;
+	}
+
+	struct pollfd fds[1];
+	fds[0].fd = fileno(f);
+	fds[0].events = POLLPRI;
+
+	while (1) {
+		int change;
+
+		/* BLOCK till device is unmounted. */
+		change = poll(fds, 1, -1);
+		if (change == -1) {
+			log_fn("%s", strerror(errno));
+			return 0;
+		}
+
+		if (! is_mounted(devpath, f)) {
+			fclose(f);
+			return 1;
+		}
+	}
 }
