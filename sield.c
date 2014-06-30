@@ -136,8 +136,11 @@ int main(int argc, char **argv)
 		/* Check if enabled. */
 		if (get_sield_attr_int("enable") == 0) {
 			sleep(1);
+			delete_udev_rule();
 			continue;
 		}
+
+		write_udev_rule();
 
 		/*
 		 * Receive udev_device for any "block" device which was
