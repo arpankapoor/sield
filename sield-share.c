@@ -10,7 +10,8 @@
 static const char *SMB_FILE = "/etc/samba/smb.conf";
 static const char *SMB_FILE_BAK = "/etc/samba/smb.conf.bak";
 static int backup_smb_file(void);
-static int write_smbconf(const char *path);
+static int write_smbconf(const char *path,
+	const char *manufacturer, const char *product);
 static int restart_daemon(const char *name);
 static int restart_daemon_alt(const char *name);
 
@@ -18,9 +19,10 @@ static int restart_daemon_alt(const char *name);
  * Write custom smb.conf file
  * and restart samba daemon.
  */
-int samba_share(const char *path)
+int samba_share(const char *path,
+	const char *manufacturer, const char *product)
 {
-	return write_smbconf(path)
+	return write_smbconf(path, manufacturer, product)
 		&& restart_daemon("smbd")
 		&& restart_daemon("nmbd");
 }
@@ -62,14 +64,15 @@ static int backup_smb_file(void)
  *
  * Return 1 on success, else return 0.
  */
-static int write_smbconf(const char *path)
+static int write_smbconf(const char *path,
+	const char *manufacturer, const char *product)
 {
 	/* Backup old smb file. */
 	if (! backup_smb_file()) return 0;
 
 	FILE *smb = fopen(SMB_FILE, "w");
 	if (! smb) {
-		log_fn("Unable to open \"%s\" for writing.");
+		log_fn("Unable to open \"%s\" for writing.", SMB_FILE);
 		return 0;
 	}
 
@@ -87,9 +90,10 @@ static int write_smbconf(const char *path)
 	}
 	
 	fprintf(smb, "log file = /var/log/samba/log.%%m\n");
+	fprintf(smb, "server string = USB Share\n");
 
 	/* Local settings */
-	fprintf(smb, "[sield]\n");
+	fprintf(smb, "[%s %s]\n", manufacturer, product);
 	fprintf(smb, "path = %s\n", path);
 	fprintf(smb, "browseable = yes\n");
 
