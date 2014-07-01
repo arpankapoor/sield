@@ -118,6 +118,7 @@ int main(int argc, char **argv)
 		struct udev_device *dev = udev_device_new_from_syspath(udev, path);
 
 		const char *devtype = udev_device_get_devtype(dev);
+		const char *devnode = udev_device_get_devnode(dev);
 
 		/* Ignore devices other than partitions. */
 		if (strcmp(devtype, "partition")) continue;
@@ -125,7 +126,34 @@ int main(int argc, char **argv)
 		/* Ensure it is a usb device. */
 		struct udev_device *parent = udev_device_get_parent_with_subsystem_devtype(
 				dev, "usb", "usb_device");
-		if (! parent) continue;
+		if (! parent) {
+			udev_device_unref(dev);
+			continue;
+		}
+
+		/*
+		 * If device is already mounted & remount is set to 1,
+		 * unmount the device and use SIELD for mounting.
+		 */
+		if (is_mounted(devnode)) {
+			long int remount = get_sield_attr_int("remount");
+			if (remount != 1) {
+				log_fn("%s is mounted, but remount conifguration not set. "
+					"Ignoring device.", devnode);
+				udev_device_unref(dev);
+				continue;
+			}
+
+			char *mt_pt = get_mount_point(devnode);
+			if (unmount(mt_pt) == -1) {
+				udev_device_unref(dev);
+				free(mt_pt);
+				continue;
+			} else {
+				log_fn("Unmounted %s from %s.", devnode, mt_pt);
+				free(mt_pt);
+			}
+		}
 
 		handle_device(dev, parent);
 

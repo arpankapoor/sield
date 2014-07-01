@@ -14,13 +14,14 @@
 
 static const char *PROC_MOUNTS = "/proc/mounts";
 
-static char *get_mount_point(struct udev_device *device);
+static char *get_mount_point_attr(struct udev_device *device);
 char *mount_device(struct udev_device *device, int ro);
 int unmount(const char *target);
-static int is_mounted(const char *devpath, FILE *mounts);
+int is_mounted(const char *devpath);
+char *get_mount_point(const char *devpath);
 int has_unmounted(const char *devpath);
 
-static char *get_mount_point(struct udev_device *device)
+static char *get_mount_point_attr(struct udev_device *device)
 {
 	/* If mount point is given in the config file. */
 	char *target = get_sield_attr("mount point");
@@ -58,7 +59,7 @@ char *mount_device(struct udev_device *device, int ro)
 	const char *fs_type = udev_device_get_property_value(device, "ID_FS_TYPE");
 
 	/* Mount point */
-	char *target = get_mount_point(device);
+	char *target = get_mount_point_attr(device);
 
 	/*
 	 * Create the mountpoint if it does not already exist.
@@ -104,13 +105,19 @@ int unmount(const char *target)
  *
  * Return 1 if present, else return 0.
  */
-static int is_mounted(const char *devpath, FILE *mounts)
+int is_mounted(const char *devpath)
 {
+	FILE *mount_fp = fopen(PROC_MOUNTS, "r");
+	if (! mount_fp) {
+		log_fn("Cannot open \"%s\" for reading.", PROC_MOUNTS);
+		return 0;
+	}
+
 	char *line = NULL;
 	size_t len = 0;
 	int ret = 1;
 
-	while (getline(&line, &len, mounts) != -1) {
+	while (getline(&line, &len, mount_fp) != -1) {
 		char *device = NULL;
 
 		/* %m modifier for dynamic string allocation. */
@@ -122,7 +129,47 @@ static int is_mounted(const char *devpath, FILE *mounts)
 	}
 
 	if (line) free(line);
+	fclose(mount_fp);
+
 	return ret == 0;
+}
+
+/*
+ * Return given device's mount point from the
+ * PROC_MOUNTS file.
+ */
+char *get_mount_point(const char *devpath)
+{
+	FILE *mount_fp = fopen(PROC_MOUNTS, "r");
+	if (! mount_fp) {
+		log_fn("Cannot open \"%s\" for reading.", PROC_MOUNTS);
+		return 0;
+	}
+
+	char *mt_pt_copy = NULL;
+	char *line = NULL;
+	size_t len = 0;
+	int found = 0;
+
+	while (getline(&line, &len, mount_fp) != -1) {
+		char *device = NULL, *mt_pt = NULL;
+
+		/* %m modifier for dynamic string allocation. */
+		sscanf(line, "%ms %ms", &device, &mt_pt);
+		found = (strcmp(device, devpath) == 0);
+		if (device) free(device);
+
+		if (found) {
+			mt_pt_copy = strdup(mt_pt);
+			free(mt_pt);
+			break;
+		}
+	}
+
+	if (line) free(line);
+	fclose(mount_fp);
+
+	return mt_pt_copy;
 }
 
 /*
@@ -152,7 +199,7 @@ int has_unmounted(const char *devpath)
 			return 0;
 		}
 
-		if (! is_mounted(devpath, f)) {
+		if (! is_mounted(devpath)) {
 			fclose(f);
 			return 1;
 		}
