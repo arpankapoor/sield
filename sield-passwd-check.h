@@ -1,7 +1,6 @@
 #ifndef _SIELD_PASSWD_H_
 #define _SIELD_PASSWD_H_
 
-/* Check password */
-int passwd_check(const char *plain_text_passwd);
+int passwd_correct(const char *plain_txt_passwd);
 
 #endif
