@@ -1,13 +1,13 @@
-#define _GNU_SOURCE
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#define _GNU_SOURCE         /* asprintf() */
+#include <stdio.h>          /* asprintf() */
+#include <stdlib.h>         /* free() */
+#include <string.h>         /* strdup() */
 
-#include "sield-config.h"
-#include "sield-log.h"
+#include "sield-config.h"   /* get_sield_attr() */
+#include "sield-log.h"      /* log_fn() */
 
-static const char *AV_PATH = "/usr/bin/clamscan";
-static const char *AV_LOGFILE = "/var/log/sield-av.log";
+static const char *AVPATH = "/usr/bin/clamscan";
+static const char *LOGFILE = "/var/log/sield.log";
 
 /*
  * Scan all files in given directory.
@@ -17,35 +17,37 @@ static const char *AV_LOGFILE = "/var/log/sield-av.log";
  * 1 if virus is detected, &
  * 2 on error.
  */
-int virus_scan(const char *dir)
+int is_infected(const char *dir)
 {
-	char *cmd = NULL;
+    char *avpath = NULL;
+    char *logfile = NULL;
+    char *cmd = NULL;
+    int avresult = 2;
 
-	char *av_logfile = get_sield_attr("av log file");
-	if (! av_logfile) av_logfile = strdup(AV_LOGFILE);
+    /* Anti-virus path */
+    avpath = get_sield_attr("av path");
+    if (!avpath) avpath = strdup(AVPATH);
 
-	if (asprintf(&cmd, "%s -r -l %s %s",
-			AV_PATH, av_logfile, dir) == -1) {
-		log_fn("clam_scan: asprintf: memory error.");
-		return 2;
-	}
+    /* Log file */
+    logfile = get_sield_attr("log file");
+    if (!logfile) logfile = strdup(LOGFILE);
 
-	log_fn("Starting virus scan on %s using clamscan.", dir);
-	int av_result = system(cmd);
-	log_fn("Virus scan on %s completed.", dir);
+    if (asprintf(&cmd, "%s -r -l %s %s", avpath, logfile, dir) == -1) {
+        log_fn("clamscan: asprintf(): memory error.");
+        return 2;
+    }
 
-	if (av_result == 0) {
-		log_fn("No virus found.");
-	} else if (av_result == 1) {
-		log_fn("Virus(es) found. "
-			"View %s for more details.", av_logfile);
-	} else {
-		log_fn("Some error(s) occurred while scanning. "
-			"View %s for more details.", av_logfile);
-	}
+    log_fn("Starting virus scan on %s using clamscan.", dir);
+    avresult = system(cmd);
+    log_fn("Virus scan on %s completed.", dir);
 
-	if (cmd) free(cmd);
-	if (av_logfile) free(av_logfile);
+    if (avresult == 0) log_fn("No virus found.");
+    else if (avresult == 1) log_fn("Virus(es) found.");
+    else log_fn("Some error(s) occurred while scanning.");
 
-	return av_result;
+    if (avpath) free(avpath);
+    if (logfile) free(logfile);
+    if (cmd) free(cmd);
+
+    return avresult;
 }
