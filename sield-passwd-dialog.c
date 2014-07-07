@@ -1,145 +1,172 @@
-#define _GNU_SOURCE
+#define _GNU_SOURCE             /* asprintf() */
 #include <gtk/gtk.h>
-#include <stdlib.h>
-#include <string.h>
+#include <stdlib.h>             /* free() */
+#include <string.h>             /* asprintf() */
 
-#include "sield-log.h"
-#include "sield-passwd-check.h"
+#include "sield-config.h"           /* get_sield_attr_int() */
+#include "sield-log.h"              /* log_fn() */
+#include "sield-passwd-check.h"     /* passwd_correct() */
 #include "sield-passwd-dialog.h"
 
-struct passwd_data {
-	GtkWidget *entry;
-	GtkWidget *wrong_passwd;
+struct passwd_widgets {
+    GtkWidget *entry;
+    GtkWidget *wrong_passwd_hbox;
+    GtkWidget *wrong_passwd_label;
 };
 
-static int passwd_correct;
+static int passwd_match;
+static int passwd_try_no;
+static long int MAX_PASSWD_TRIES;
 static void passwd_response(GtkWidget *widget, int response, gpointer data);
 
 /*
  * Display the password input dialog.
  *
- * Return 1 if correct password is entered, else
- * return 0.
+ * Return 1 if correct password is entered, else return 0.
  */
-int ask_passwd_dialog(const char *manufacturer,
-		const char *product)
+int ask_passwd_dialog(const char *manufacturer, const char *product)
 {
-	gtk_init(0, NULL);
+    GtkWidget *dialog = NULL;
+    GtkWidget *image = NULL;
+    GtkWidget *hbox = NULL;
+    GtkWidget *label = NULL;
+    GtkWidget *vbox_labels = NULL;
+    GtkWidget *vbox_entries = NULL;
+    GtkWidget *entry = NULL;
+    GtkWidget *align = NULL;
+    struct passwd_widgets *pwd_widgets = NULL;
+    char *device_info = NULL;
 
-	GtkWidget *dialog = gtk_dialog_new();
+    gtk_init(0, NULL);
 
-	/* Cancel & OK buttons */
-	gtk_dialog_add_button(GTK_DIALOG(dialog),
-		GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL);
-	gtk_dialog_add_button(GTK_DIALOG(dialog),
-		GTK_STOCK_OK, GTK_RESPONSE_OK);
+    dialog = gtk_dialog_new();
 
-	/* Authentication image */
-	GtkWidget *image = gtk_image_new_from_stock(
-		GTK_STOCK_DIALOG_AUTHENTICATION, GTK_ICON_SIZE_DIALOG);
+    /* Cancel & OK buttons */
+    gtk_dialog_add_button(GTK_DIALOG(dialog), GTK_STOCK_CANCEL,
+                          GTK_RESPONSE_CANCEL);
+    gtk_dialog_add_button(GTK_DIALOG(dialog), GTK_STOCK_OK, GTK_RESPONSE_OK);
 
-	/* Default response is OK */
-	gtk_dialog_set_default_response(GTK_DIALOG(dialog),
-					GTK_RESPONSE_OK);
+    /* Default response is OK */
+    gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_OK);
 
-	GtkWidget *hbox = gtk_hbox_new(FALSE, 5);
-	gtk_box_pack_start(GTK_BOX(hbox), image, FALSE, FALSE, 12);
+    /* Authentication image */
+    image = gtk_image_new_from_stock(GTK_STOCK_DIALOG_AUTHENTICATION,
+                                     GTK_ICON_SIZE_DIALOG);
 
-	/* Print device info */
-	char *dev_info = NULL;
-	if (asprintf(&dev_info, "%s %s inserted.\n"
-			"Authorization needed to mount and share.",
-			manufacturer, product) == -1) {
-		dev_info = strdup("USB block device inserted.\n"
-				"Authorization needed to mount and share.");
-	}
+    hbox = gtk_hbox_new(FALSE, 5);
+    gtk_box_pack_start(GTK_BOX(hbox), image, FALSE, FALSE, 12);
 
-	GtkWidget *label = gtk_label_new(dev_info);
-	if (dev_info) free(dev_info);
+    /* Print device info */
+    if (asprintf(&device_info, "%s %s inserted.\n"
+                 "Authorization needed to mount and share.",
+                 manufacturer, product) == -1) {
+        device_info = strdup("USB block device inserted.\n"
+                             "Authorization needed to mount and share.");
+    }
+    label = gtk_label_new(device_info);
+    if (device_info) free(device_info);
 
-	gtk_box_pack_start(GTK_BOX(hbox), label, FALSE, FALSE, 12);
-	gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))),
-			hbox, FALSE, TRUE, 5);
+    gtk_box_pack_start(GTK_BOX(hbox), label, FALSE, FALSE, 12);
+    gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))),
+                       hbox, FALSE, TRUE, 5);
 
-	/* Password label and entry */
-	GtkWidget *vbox_labels = gtk_vbox_new(FALSE, 5);
-	GtkWidget *vbox_entries = gtk_vbox_new(FALSE, 5);
+    /* Password label and entry */
+    vbox_labels = gtk_vbox_new(FALSE, 5);
+    vbox_entries = gtk_vbox_new(FALSE, 5);
 
-	hbox = gtk_hbox_new(FALSE, 5);
-	gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))),
-		hbox, FALSE, TRUE, 5);
+    hbox = gtk_hbox_new(FALSE, 5);
+    gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))),
+                       hbox, FALSE, TRUE, 5);
 
-	gtk_box_pack_start(GTK_BOX(hbox), vbox_labels, FALSE, TRUE, 12);
-	gtk_box_pack_start(GTK_BOX(hbox), vbox_entries, TRUE, TRUE, 12);
+    gtk_box_pack_start(GTK_BOX(hbox), vbox_labels, FALSE, TRUE, 12);
+    gtk_box_pack_start(GTK_BOX(hbox), vbox_entries, TRUE, TRUE, 12);
 
-	GtkWidget *align = gtk_alignment_new(0.0, 0.5, 0.0, 0.0);
-	label = gtk_label_new("Password:");
-	gtk_container_add(GTK_CONTAINER(align), label);
+    align = gtk_alignment_new(0.0, 0.5, 0.0, 0.0);
+    label = gtk_label_new("Password:");
+    gtk_container_add(GTK_CONTAINER(align), label);
+    gtk_box_pack_start(GTK_BOX(vbox_labels), align, TRUE, FALSE, 12);
 
-	gtk_box_pack_start(GTK_BOX(vbox_labels), align, TRUE, FALSE, 12);
+    pwd_widgets = malloc(sizeof(struct passwd_widgets));
 
-	struct passwd_data *password_data = malloc(sizeof password_data);
-	password_data->entry = gtk_entry_new();
-	gtk_entry_set_visibility(GTK_ENTRY(password_data->entry), FALSE);
-	gtk_entry_set_activates_default(GTK_ENTRY(password_data->entry),
-				TRUE);
+    /* Password entry */
+    pwd_widgets->entry = entry = gtk_entry_new();
+    gtk_entry_set_visibility(GTK_ENTRY(entry), FALSE);
+    gtk_entry_set_activates_default(GTK_ENTRY(entry), TRUE);
+    gtk_box_pack_start(GTK_BOX(vbox_entries), entry, TRUE, TRUE, 12);
 
-	gtk_box_pack_start(GTK_BOX(vbox_entries),
-			password_data->entry, TRUE, TRUE, 12);
+    /* Wrong password label */
+    pwd_widgets->wrong_passwd_hbox = hbox = gtk_hbox_new(FALSE, 5);
 
-	/* Wrong password label. */
-	password_data->wrong_passwd = hbox = gtk_hbox_new(FALSE, 5);
+    /* Error image */
+    image = gtk_image_new_from_stock(GTK_STOCK_DIALOG_ERROR,
+                                     GTK_ICON_SIZE_BUTTON);
+    gtk_box_pack_start(GTK_BOX(hbox), image, FALSE, FALSE, 12);
 
-	image = gtk_image_new_from_stock(
-		GTK_STOCK_DIALOG_ERROR, GTK_ICON_SIZE_BUTTON);
-	gtk_box_pack_start(GTK_BOX(hbox), image, FALSE, FALSE, 12);
+    label = gtk_label_new("Incorrect password. Please try again.");
+    pwd_widgets->wrong_passwd_label = label;
+    gtk_box_pack_start(GTK_BOX(hbox), label, FALSE, FALSE, 12);
+    gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))),
+                       hbox, FALSE, TRUE, 5);
 
-	label = gtk_label_new("Incorrect password. Please try again.");
-	gtk_box_pack_start(GTK_BOX(hbox), label, FALSE, FALSE, 12);
-	gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))),
-			hbox, FALSE, TRUE, 5);
+    /* Hide wrong password label. */
+    gtk_widget_set_no_show_all(hbox, TRUE);
 
-	/* Hide wrong password label. */
-	gtk_widget_set_no_show_all(hbox, TRUE);
+    g_signal_connect(G_OBJECT(dialog), "response", G_CALLBACK(passwd_response),
+                     pwd_widgets);
 
-	g_signal_connect(G_OBJECT(dialog), "response",
-			G_CALLBACK(passwd_response), password_data);
+    gtk_widget_show_all(
+            GTK_WIDGET(gtk_dialog_get_content_area(GTK_DIALOG(dialog))));
+    gtk_widget_show(dialog);
 
-	gtk_widget_show_all(GTK_WIDGET(gtk_dialog_get_content_area(GTK_DIALOG(dialog))));
-	gtk_widget_show(dialog);
+    passwd_match = 0;
+    passwd_try_no = 1;
+    MAX_PASSWD_TRIES = get_sield_attr_int("max password tries");
+    if (MAX_PASSWD_TRIES == -1) MAX_PASSWD_TRIES = 3;
 
-	passwd_correct = 0;
-	gtk_main();
+    gtk_main();
 
-	free(password_data);
-	return passwd_correct;
+    if (pwd_widgets) free(pwd_widgets);
+    return passwd_match;
 }
 
 static void passwd_response(GtkWidget *widget, int response, gpointer data)
 {
-	struct passwd_data *password_data = (struct passwd_data *) data;
-	const gchar *plain_txt_passwd = gtk_entry_get_text(GTK_ENTRY(password_data->entry));
-	switch (response) {
-	case GTK_RESPONSE_OK:
-		if (passwd_check(plain_txt_passwd)) {
-			passwd_correct = 1;
-			gtk_widget_destroy(widget);
-			gtk_main_quit();
-		} else {
-			passwd_correct = 0;
+    struct passwd_widgets *pwd_widgets = (struct passwd_widgets *) data;
+    GtkWidget *pwd_entry = pwd_widgets->entry;
+    GtkWidget *wrong_pwd_hbox = pwd_widgets->wrong_passwd_hbox;
+    GtkWidget *wrong_pwd_label = pwd_widgets->wrong_passwd_label;
+    const char *plain_txt_passwd = gtk_entry_get_text(GTK_ENTRY(pwd_entry));
 
-			/* Clear password entry text area */
-			gtk_entry_set_text(GTK_ENTRY(password_data->entry), "");
+    switch (response) {
+    case GTK_RESPONSE_OK:
+        if (is_passwd_correct(plain_txt_passwd)) {
+            passwd_match = 1;
+            gtk_widget_destroy(widget);
+            gtk_main_quit();
+        } else {
+            passwd_match = 0;
+            passwd_try_no++;
 
-			/* Show incorrect password label */
-			gtk_widget_set_no_show_all(password_data->wrong_passwd, FALSE);
-			gtk_widget_show_all(password_data->wrong_passwd);
-			gtk_widget_show(password_data->wrong_passwd);
-		}
-		break;
-	default:
-		gtk_widget_destroy(widget);
-		gtk_main_quit();
-		break;
-	}
+            /* Clear password entry text area */
+            gtk_entry_set_text(GTK_ENTRY(pwd_entry), "");
+
+            if (passwd_try_no == MAX_PASSWD_TRIES) {
+                char *wrong_pwd = strdup("Incorrect password.\nLast attempt.");
+                gtk_label_set_text(GTK_LABEL(wrong_pwd_label), wrong_pwd);
+                if (wrong_pwd) free(wrong_pwd);
+            }
+
+            /* Show incorrect password label */
+            gtk_widget_set_no_show_all(wrong_pwd_hbox, FALSE);
+            gtk_widget_show_all(wrong_pwd_hbox);
+            gtk_widget_show(wrong_pwd_hbox);
+        }
+
+        if (passwd_try_no <= MAX_PASSWD_TRIES) break;
+
+    default:
+        gtk_widget_destroy(widget);
+        gtk_main_quit();
+        break;
+    }
 }
