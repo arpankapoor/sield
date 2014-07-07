@@ -3,6 +3,7 @@
 #include <stdlib.h>         /* free() */
 #include <string.h>         /* strdup() */
 
+#include "sield-av.h"
 #include "sield-config.h"   /* get_sield_attr() */
 #include "sield-log.h"      /* log_fn() */
 

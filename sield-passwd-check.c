@@ -8,12 +8,70 @@
 #include <sys/types.h>      /* getpwuid() */
 #include <unistd.h>         /* crypt(), access() */
 
-#include "sield-config.h"
-#include "sield-log.h"
+#include "sield-config.h"   /* get_sield_attr() */
+#include "sield-log.h"      /* log_fn() */
 #include "sield-passwd-check.h"
 
 static char *get_encrypted_user_passwd(uid_t uid);
 static char *get_sield_passwd(void);
+
+/*
+ * Check against:
+ * 1. Application password, if defined, else
+ * 2. Superuser password.
+ *
+ * Return 1 if password is correct, else return 0.
+ */
+int is_passwd_correct(const char *plain_txt_passwd)
+{
+    char *encrypted_passwd_to_check_against = NULL;
+    char *salt = NULL;
+    char *given_passwd_encrypted = NULL;
+    int passwd_match = 0;
+
+    encrypted_passwd_to_check_against = get_sield_passwd();
+
+    if (!encrypted_passwd_to_check_against) {
+        log_fn("Application password not set. Trying to use superuser password.");
+        encrypted_passwd_to_check_against = get_encrypted_user_passwd(0);
+    }
+
+    if (!encrypted_passwd_to_check_against) {
+        log_fn("Could not get superuser password.");
+        return 0;
+    }
+
+    /*
+     * salt is a character string starting with the characters "$id$"
+     * followed by a string terminated by "$":
+     *
+     * $id$salt$encrypted
+     *
+     * Here actual encrypted password can act as salt.
+     */
+    salt = encrypted_passwd_to_check_against;
+    given_passwd_encrypted = crypt(plain_txt_passwd, salt);
+
+    passwd_match = !strcmp(encrypted_passwd_to_check_against,
+                           given_passwd_encrypted);
+
+    if (encrypted_passwd_to_check_against)
+        free(encrypted_passwd_to_check_against);
+
+    /*
+     * DO NOT FREE THE STRING RETURNED FROM crypt(3).
+     * Time wasted: ~5hrs
+     *
+     * Take note of the following golden words from the crypt(3) man page.
+     *
+     *  The return value points to static data whose content is
+     *  overwritten by each call.
+     *
+     * free(given_passwd_encrypted);
+     */
+
+    return passwd_match;
+}
 
 /*
  * Return encrypted password for the given UID.
@@ -76,7 +134,7 @@ static char *get_sield_passwd(void)
     /* Check if password file exists. */
     if (access(PASSWD_FILE, F_OK) == -1) {
         log_fn("%s", strerror(errno));
-        log_fn("Password file does not exist.");
+        log_fn("Password file %s does not exist.", PASSWD_FILE);
         return NULL;
     }
 
@@ -100,62 +158,4 @@ static char *get_sield_passwd(void)
     encrypted_passwd[read-1] = '\0';
 
     return encrypted_passwd;
-}
-
-/*
- * Check against:
- * 1. Application password, if defined, else
- * 2. Superuser password.
- *
- * Return 1 if password is correct, else return 0.
- */
-int passwd_correct(const char *plain_txt_passwd)
-{
-    char *encrypted_passwd_to_check_against = NULL;
-    char *salt = NULL;
-    char *given_passwd_encrypted = NULL;
-    int passwd_match = 0;
-
-    encrypted_passwd_to_check_against = get_sield_passwd();
-
-    if (!encrypted_passwd_to_check_against) {
-        log_fn("Application password not set. Trying to use superuser password.");
-        encrypted_passwd_to_check_against = get_encrypted_user_passwd(0);
-    }
-
-    if (!encrypted_passwd_to_check_against) {
-        log_fn("Could not get superuser password.");
-        return 0;
-    }
-
-    /*
-     * salt is a character string starting with the characters "$id$"
-     * followed by a string terminated by "$":
-     *
-     * $id$salt$encrypted
-     *
-     * Here actual encrypted password can act as salt.
-     */
-    salt = encrypted_passwd_to_check_against;
-    given_passwd_encrypted = crypt(plain_txt_passwd, salt);
-
-    passwd_match = !strcmp(encrypted_passwd_to_check_against,
-                           given_passwd_encrypted);
-
-    if (encrypted_passwd_to_check_against)
-        free(encrypted_passwd_to_check_against);
-
-    /*
-     * DO NOT FREE THE STRING RETURNED FROM crypt(3).
-     * Time wasted: ~5hrs
-     *
-     * Take note of the following golden words from the crypt(3) man page.
-     *
-     *  The return value points to static data whose content is
-     *  overwritten by each call.
-     *
-     * free(given_passwd_encrypted);
-     */
-
-    return passwd_match;
 }
