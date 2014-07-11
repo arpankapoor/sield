@@ -1,104 +1,104 @@
-#define _GNU_SOURCE		/* strdup() */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>		/* strdup() */
-#include <time.h>
+#define _GNU_SOURCE     /* strdup() */
+#include <libudev.h>
+#include <stdarg.h>     /* va_list() */
+#include <stdio.h>      /* fprintf() */
+#include <stdlib.h>     /* free() */
+#include <string.h>     /* strdup() */
+#include <time.h>       /* strftime() */
 
 #include "sield-log.h"
-#include "sield-config.h"
+#include "sield-config.h"   /* get_sield_attr_no_log() */
+
+static const char *LOGFILE = "/var/log/sield.log";
 
 static FILE *open_log_file(void);
-static void close_log_file(FILE *LOG_FP);
 static void write_timestamp(FILE *fp);
 
 static FILE *open_log_file(void)
 {
-	char *LOG_FILE = get_sield_attr_no_log("logfile");
-	if (! LOG_FILE) LOG_FILE = strdup("/var/log/sield.log");
+    char *logfile = get_sield_attr_no_log("log file");
+    if (logfile == NULL) logfile = strdup(LOGFILE);
 
-	FILE *LOG_FP = fopen(LOG_FILE, "a");
-	if (! LOG_FP) {
-#ifdef DEBUG
-		fprintf(stderr, "Unable to open log file %s.\n", LOG_FILE);
-#endif
-	}
-
-	free(LOG_FILE);
-	return LOG_FP;
+    FILE *log_fp = fopen(logfile, "a");
+    if (logfile != NULL) free(logfile);
+    return log_fp;
 }
 
-static void close_log_file(FILE *LOG_FP)
-{
-	/* fclose() returns 0 on success. */
-	if (fclose(LOG_FP)) {
-#ifdef DEBUG
-		fprintf(stderr, "Unable to close log file.\n");
-#endif
-	}
-}
-
-/* Write current system time in the format "[%Y-%m-%d %H:%M] "
- * to given file stream. */
 #define TIME_STR_BUFFER 25
+/*
+ * Write current system time in the format "[%Y-%m-%d %H:%M] "
+ * to given file stream.
+ */
 static void write_timestamp(FILE *fp)
 {
-	if (! fp) return;
+    if (fp == NULL) return;
 
-	time_t timer = time(NULL);
-	char current_time[TIME_STR_BUFFER];
-	strftime(current_time, TIME_STR_BUFFER, "[%F %T] ", localtime(&timer));
+    time_t timer = time(NULL);
+    char current_time[TIME_STR_BUFFER];
+    strftime(current_time, TIME_STR_BUFFER, "[%F %T] ", localtime(&timer));
 
-	fprintf(fp, "%s", current_time);
+    fprintf(fp, "%s", current_time);
 }
 
-/* Write message along with a newline to the LOG_FILE */
+/*
+ * Write given message to log file.
+ */
 void _log_fn(const char *format, ...)
 {
-	FILE *LOG_FP = open_log_file();
-	if(! LOG_FP) return;
+    FILE *log_fp = open_log_file();
+    if (log_fp == NULL) return;
 
-	write_timestamp(LOG_FP);
+    write_timestamp(log_fp);
 
-	va_list arg;
-	va_start(arg, format);
-	vfprintf(LOG_FP, format , arg);
-	va_end(arg);
-	close_log_file(LOG_FP);
+    va_list arg;
+    va_start(arg, format);
+    vfprintf(log_fp, format, arg);
+    va_end(arg);
+    fclose(log_fp);
 }
 
-/* Log block device information */
 void log_block_device_info(struct udev_device *device,
-	struct udev_device *parent)
+                           struct udev_device *parent)
 {
-	if (! device || ! parent) return;
-	log_fn("%s identified.\n"
-		"  DEVICE INFORMATION\n"
-		"\tVendor=%s ProdID=%s\n"
-		"\tManufacturer=%s\n"
-		"\tProduct=%s\n"
-		"\tSerial#=%s\n"
-		"\tDevNode=%s\n"
-		"\tFileSystem=%s\n",
-		udev_device_get_devtype(device),
-		udev_device_get_sysattr_value(parent, "idVendor"),
-		udev_device_get_sysattr_value(parent, "idProduct"),
-		udev_device_get_sysattr_value(parent, "manufacturer"),
-		udev_device_get_sysattr_value(parent, "product"),
-		udev_device_get_sysattr_value(parent, "serial"),
-		udev_device_get_devnode(device),
-		udev_device_get_property_value(device, "ID_FS_TYPE"));
+    if ((device == NULL) || (parent == NULL)) return;
+
+    log_fn("Device identified.\n"
+           "----------------------------------------"
+           "----------------------------------------\n"
+           "DEVICE INFORMATION\n"
+           "==================\n"
+           "Vendor ID = %s\n"
+           "Product ID = %s\n"
+           "Serial Number = %s\n"
+           "Manufacturer = %s\n"
+           "Product = %s\n"
+           "Product version = %s\n"
+           "USB version = %s\n"
+           "Device node = %s\n"
+           "File system = %s\n"
+           "----------------------------------------"
+           "----------------------------------------",
+           udev_device_get_sysattr_value(parent, "idVendor"),
+           udev_device_get_sysattr_value(parent, "idProduct"),
+           udev_device_get_sysattr_value(parent, "serial"),
+           udev_device_get_sysattr_value(parent, "manufacturer"),
+           udev_device_get_sysattr_value(parent, "product"),
+           udev_device_get_sysattr_value(parent, "bcdDevice"),
+           udev_device_get_sysattr_value(parent, "version"),
+           udev_device_get_devnode(device),
+           udev_device_get_property_value(device, "ID_FS_TYPE"));
 }
 
-void udev_custom_log_fn(struct udev *udev,
-	int priority, const char *file, int line, const char *fn,
-	const char *format, va_list args)
+void udev_custom_log_fn(struct udev *udev, int priority, const char *file,
+                        int line, const char *fn, const char *format,
+                        va_list args)
 {
-	FILE *LOG_FP = open_log_file();
-	if (! LOG_FP) return;
+    FILE *log_fp = open_log_file();
+    if (log_fp == NULL) return;
 
-	write_timestamp(LOG_FP);
-	fprintf(LOG_FP, "[libudev] [%s] ", fn);
-	vfprintf(LOG_FP, format, args);
+    write_timestamp(log_fp);
+    fprintf(log_fp, "[libudev] [%s] ", fn);
+    vfprintf(log_fp, format, args);
 
-	close_log_file(LOG_FP);
+    fclose(log_fp);
 }
