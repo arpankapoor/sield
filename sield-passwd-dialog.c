@@ -145,6 +145,9 @@ static void passwd_response(GtkWidget *widget, int response, gpointer data)
             gtk_main_quit();
         } else {
             passwd_match = 0;
+            log_fn("Wrong password provided through GUI. Attempt no. %d",
+                   passwd_try_no);
+
             passwd_try_no++;
 
             /* Clear password entry text area */
