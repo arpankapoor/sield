@@ -70,9 +70,9 @@ void log_block_device_info(struct udev_device *device,
            "Vendor ID = %s\n"
            "Product ID = %s\n"
            "Serial Number = %s\n"
+           "Revision = %s\n"
            "Manufacturer = %s\n"
            "Product = %s\n"
-           "Product version = %s\n"
            "USB version = %s\n"
            "Device node = %s\n"
            "File system = %s\n"
@@ -81,9 +81,9 @@ void log_block_device_info(struct udev_device *device,
            udev_device_get_sysattr_value(parent, "idVendor"),
            udev_device_get_sysattr_value(parent, "idProduct"),
            udev_device_get_sysattr_value(parent, "serial"),
+           udev_device_get_sysattr_value(parent, "bcdDevice"),
            udev_device_get_sysattr_value(parent, "manufacturer"),
            udev_device_get_sysattr_value(parent, "product"),
-           udev_device_get_sysattr_value(parent, "bcdDevice"),
            udev_device_get_sysattr_value(parent, "version"),
            udev_device_get_devnode(device),
            udev_device_get_property_value(device, "ID_FS_TYPE"));
