@@ -13,9 +13,6 @@
 #include "sield-log.h"      /* log_fn() */
 #include "sield-passwd-cli-get.h"   /* get_passwd() */
 
-static const char *FIFO_DIR = "/tmp/sld/";
-static char *PROGRAM_NAME = NULL;
-
 static char *get_username(uid_t uid);
 static int fifo_filter(const struct dirent *ent);
 

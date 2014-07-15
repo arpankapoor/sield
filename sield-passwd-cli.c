@@ -13,9 +13,6 @@
 #include "sield-passwd-check.h"     /* is_passwd_correct() */
 #include "sield-passwd-cli.h"
 
-static const char *PROGRAM_NAME = "sld";
-static const char *FIFO_DIR = "/tmp/sld/";
-
 static int notify_tty(const char *tty, const char *manufacturer,
                       const char *product, const char *devnode);
 static int notify_all_ttys(const char *manufacturer, const char *product,
