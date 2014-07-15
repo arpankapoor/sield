@@ -166,7 +166,7 @@ int main(int argc, char *argv[])
         if (entries[i]) free(entries[i]);
     }
     if (entries) free(entries);
-    if (fp) fclose(fp);
+    fclose(fp);
 
     exit(EXIT_SUCCESS);
 error:

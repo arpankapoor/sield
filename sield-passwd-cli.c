@@ -159,16 +159,16 @@ int ask_passwd_cli(const char *manufacturer, const char *product,
     fifo_path = makefifo(manufacturer, product, devnode);
     if (fifo_path == NULL) return 0;
 
-    /* Open the named pipe for reading. */
-    fp = fopen(fifo_path, "r");
-    if (fp == NULL) {
-        log_fn("fopen: %s", strerror(errno));
-        log_fn("Unable to open %s for reading.", fifo_path);
-        if (fifo_path) free(fifo_path);
-        return 0;
-    }
-
     for (i = 0; (i < MAX_PWD_ATTEMPTS) && (passwd_match != 1); i++) {
+        /* Open the named pipe for reading. */
+        fp = fopen(fifo_path, "r");
+        if (fp == NULL) {
+            log_fn("fopen: %s", strerror(errno));
+            log_fn("Unable to open %s for reading.", fifo_path);
+            if (fifo_path) free(fifo_path);
+            continue;
+        }
+
         /* Lengths */
         if (fread(&lengths, sizeof(struct auth_len), 1, fp) != 1) {
             log_fn("Unable to read data (strlens) sent from CLI app.");
@@ -190,6 +190,7 @@ int ask_passwd_cli(const char *manufacturer, const char *product,
             if (tty) free(tty);
             if (username) free(username);
             if (plain_txt_passwd) free(plain_txt_passwd);
+            fclose(fp);
             continue;
         }
 
@@ -205,14 +206,20 @@ int ask_passwd_cli(const char *manufacturer, const char *product,
         if (tty) free(tty);
         if (username) free(username);
         if (plain_txt_passwd) free(plain_txt_passwd);
+        fclose(fp);
     }
 
     if (passwd_match == 0) {
-        log_fn("Maximum password attempts exhausted.");
+        log_fn("Used all password attempts.");
     }
 
-    remove(fifo_path);
+    /* Delete the associated named pipe. */
+    if (remove(fifo_path) == -1) {
+        log_fn("Unable to delete named pipe %s", fifo_path);
+    }
+    if (remove(FIFO_DIR) == -1) {
+        log_fn("Couldn't delete directory %s", FIFO_DIR);
+    }
     if (fifo_path) free(fifo_path);
-    if (fp) fclose(fp);
     return passwd_match;
 }
