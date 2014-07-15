@@ -84,7 +84,9 @@ static int notify_all_ttys(const char *manufacturer, const char *product,
     endutent();
 
     return ttys_notified;
-} /* Return the path of the named pipe constructed. */
+}
+
+/* Return the path of the named pipe constructed. */
 static char *makefifo(const char *manufacturer, const char *product,
                       const char *devnode)
 {

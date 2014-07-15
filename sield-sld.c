@@ -1,4 +1,5 @@
 #define _BSD_SOURCE         /* DT_FIFO, scandir() */
+#define _GNU_SOURCE         /* asprintf() */
 #include <dirent.h>         /* opendir() */
 #include <errno.h>          /* errno */
 #include <pwd.h>            /* getpwuid() */
@@ -53,6 +54,7 @@ int main(int argc, char *argv[])
     char *username = NULL;
     char *tty = NULL;
     char *plain_txt_passwd = NULL;
+    char *fifo_path = NULL;
     FILE *fp = NULL;
     size_t len = 0;
     struct dirent **entries = NULL;
@@ -107,15 +109,23 @@ int main(int argc, char *argv[])
         choice = 0;
     }
 
-    if (chdir(FIFO_DIR) == -1) {
-        log("Unable to change directory.");
-        fprintf(stderr, "Error occurred. Please try again.");
+    if (asprintf(&fifo_path, "%s%s",
+                 FIFO_DIR, entries[choice]->d_name) == -1) {
+        log("asprintf: memory error");
+        fprintf(stderr, "Memory error");
         goto error;
     }
 
-    fp = fopen(entries[choice]->d_name, "w");
+    fp = fopen(fifo_path, "w");
     if (fp == NULL) {
-        log("Unable to open %d for writing.", entries[choice]->d_name);
+        /* Read fifo(7) */
+        if (errno == ENXIO) {
+            log("Another user may be running sld");
+            fprintf(stderr, "Device currently unavailable. Try again.\n");
+            goto error;
+        }
+        log("fopen: %s", strerror(errno));
+        log("Unable to open %d for writing.", fifo_path);
         fprintf(stderr, "Could not open given choice.\n");
         goto error;
     }
@@ -151,6 +161,7 @@ int main(int argc, char *argv[])
 
     if (plain_txt_passwd) free(plain_txt_passwd);
     if (username) free(username);
+    if (fifo_path) free(fifo_path);
     for (i = 0; i < fifos; i++) {
         if (entries[i]) free(entries[i]);
     }
@@ -161,6 +172,7 @@ int main(int argc, char *argv[])
 error:
     if (plain_txt_passwd) free(plain_txt_passwd);
     if (username) free(username);
+    if (fifo_path) free(fifo_path);
     for (i = 0; i < fifos; i++) {
         if (entries[i]) free(entries[i]);
     }
