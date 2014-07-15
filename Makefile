@@ -1,18 +1,23 @@
 CC=gcc
 LUDEV=-ludev
 LCRYPT=-lcrypt
-CFLAGS=-Wall
+CFLAGS=-Wall -Werror
 GTK_CFLAGS=`pkg-config --cflags gtk+-2.0`
 GTK_LDFLAGS=`pkg-config --libs gtk+-2.0` -rdynamic
 
-all: sield passwd-sield
+all: sield passwd-sield sld
 
 sield: sield.o sield-av.o sield-config.o sield-daemon.o sield-log.o sield-mount.o \
-	sield-passwd-check.o sield-passwd-dialog.o sield-share.o sield-udev-helper.o
+	sield-passwd-check.o sield-passwd-ask.o sield-passwd-cli.o sield-passwd-dialog.o \
+	sield-share.o sield-udev-helper.o
 	$(CC) $(CFLAGS) $(LUDEV) $(LCRYPT) $(GTK_LDFLAGS) -o $@ $^
 
-passwd-sield: sield-config.o sield-log.o sield-passwd-update.o sield-passwd-check.o
+passwd-sield: sield-config.o sield-log.o sield-passwd-update.o \
+	sield-passwd-check.o sield-passwd-cli-get.o
 	$(CC) $(CFLAGS) $(LUDEV) $(LCRYPT) -o $@ $^
+
+sld: sield-sld.o sield-log.o sield-config.o sield-passwd-cli-get.o
+	$(CC) $(CFLAGS) $(LUDEV) -o $@ $^
 
 sield-passwd-dialog.o: sield-passwd-dialog.c
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -c -o $@ $^
@@ -24,3 +29,4 @@ clean:
 	rm -f *.o
 	rm -f passwd-sield
 	rm -f sield
+	rm -f sld
