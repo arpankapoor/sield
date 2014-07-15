@@ -4,6 +4,6 @@
 /*
  * GTK Dialog to ask for password.
  */
-int ask_passwd_dialog(const char *manufacturer, const char *product);
+int ask_passwd_gui(const char *manufacturer, const char *product);
 
 #endif

@@ -6,7 +6,7 @@
 #include "sield-config.h"           /* get_sield_attr_int() */
 #include "sield-log.h"              /* log_fn() */
 #include "sield-passwd-check.h"     /* passwd_correct() */
-#include "sield-passwd-dialog.h"
+#include "sield-passwd-gui.h"
 
 struct passwd_widgets {
     GtkWidget *entry;
@@ -24,7 +24,7 @@ static void passwd_response(GtkWidget *widget, int response, gpointer data);
  *
  * Return 1 if correct password is entered, else return 0.
  */
-int ask_passwd_dialog(const char *manufacturer, const char *product)
+int ask_passwd_gui(const char *manufacturer, const char *product)
 {
     GtkWidget *dialog = NULL;
     GtkWidget *image = NULL;
