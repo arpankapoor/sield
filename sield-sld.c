@@ -2,12 +2,14 @@
 #define _GNU_SOURCE         /* asprintf() */
 #include <dirent.h>         /* opendir() */
 #include <errno.h>          /* errno */
+#include <fcntl.h>          /* open() */
 #include <pwd.h>            /* getpwuid() */
 #include <stdio.h>          /* printf() */
 #include <stdlib.h>         /* NULL */
 #include <string.h>         /* strerror() */
+#include <sys/stat.h>       /* open() */
 #include <sys/types.h>      /* opendir() */
-#include <unistd.h>         /* getuid() */
+#include <unistd.h>         /* getuid(), write() */
 
 #include "sield-ipc.h"      /* sharing information */
 #include "sield-log.h"      /* log_fn() */
@@ -52,7 +54,7 @@ int main(int argc, char *argv[])
     char *tty = NULL;
     char *plain_txt_passwd = NULL;
     char *fifo_path = NULL;
-    FILE *fp = NULL;
+    int fd = -1;
     size_t len = 0;
     struct dirent **entries = NULL;
     struct auth_len lengths;        /* Structure to send string lengths */
@@ -113,11 +115,12 @@ int main(int argc, char *argv[])
         goto error;
     }
 
-    fp = fopen(fifo_path, "w");
-    if (fp == NULL) {
+    /* Write only, non-blocking open */
+    fd = open(fifo_path, O_WRONLY | O_NONBLOCK);
+    if (fd == -1) {
         /* Read fifo(7) */
         if (errno == ENXIO) {
-            log("Another user may be running sld");
+            log("Another user may be using sld.");
             fprintf(stderr, "Device currently unavailable. Try again.\n");
             goto error;
         }
@@ -132,6 +135,7 @@ int main(int argc, char *argv[])
     if (get_passwd(&plain_txt_passwd, &len, stdin) == -1) {
         log("Unable to get password from user.");
         fprintf(stderr, "Unable to get password. Quitting...\n");
+        close(fd);
         goto error;
     }
 
@@ -143,16 +147,17 @@ int main(int argc, char *argv[])
     lengths.pwd_len = strlen(plain_txt_passwd);
 
     /* Send data to daemon */
-    if ((fwrite(&lengths, sizeof(struct auth_len), 1, fp) != 1)
-        || (fwrite(tty + 5, sizeof(char),
-                   lengths.tty_len + 1, fp) != lengths.tty_len + 1)
-        || (fwrite(username, sizeof(char),
-                   lengths.user_len + 1, fp) != lengths.user_len + 1)
-        || (fwrite(plain_txt_passwd, sizeof(char),
-                   lengths.pwd_len + 1, fp) != lengths.pwd_len + 1)) {
+    if ((write(fd, &lengths, sizeof(struct auth_len))
+               != sizeof(struct auth_len))
+        /* sizeof(char) is ALWAYS 1 */
+        || (write(fd, tty + 5, lengths.tty_len + 1) != lengths.tty_len + 1)
+        || (write(fd, username, lengths.user_len + 1) != lengths.user_len + 1)
+        || (write(fd, plain_txt_passwd, lengths.pwd_len + 1)
+                  != lengths.pwd_len + 1)) {
 
         log("Failed to send data to daemon.\n");
         fprintf(stderr, "Failed to send data to daemon.\n");
+        close(fd);
         goto error;
     }
 
@@ -163,7 +168,7 @@ int main(int argc, char *argv[])
         if (entries[i]) free(entries[i]);
     }
     if (entries) free(entries);
-    fclose(fp);
+    close(fd);
 
     exit(EXIT_SUCCESS);
 error:
@@ -174,6 +179,5 @@ error:
         if (entries[i]) free(entries[i]);
     }
     if (entries) free(entries);
-    if (fp) fclose(fp);
     exit(EXIT_FAILURE);
 }
