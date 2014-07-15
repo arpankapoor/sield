@@ -162,7 +162,7 @@ int main(int argc, char **argv)
 
 	while (1) {
 		/* Check if enabled. */
-		if (get_sield_attr_int("enable") == 0) {
+		if (get_sield_attr_int("enable") != 1) {
 			sleep(1);
 			delete_udev_rule();
 			continue;
