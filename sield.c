@@ -9,7 +9,7 @@
 #include "sield-daemon.h"
 #include "sield-log.h"
 #include "sield-mount.h"
-#include "sield-passwd-dialog.h"
+#include "sield-passwd-ask.h"
 #include "sield-share.h"
 #include "sield-udev-helper.h"
 
@@ -34,7 +34,7 @@ static void handle_device(struct udev_device *device,
 	/**********************/
 
 	/* Incorrect password is given. */
-	if (! ask_passwd_dialog(manufacturer, product)) return;
+	if (! ask_passwd(manufacturer, product, devnode)) return;
 
 	/* Mount as read-only for virus scan */
 	/* TODO: Mount at a temporary directory */
@@ -45,7 +45,7 @@ static void handle_device(struct udev_device *device,
 	else return;
 
 	/* Scan the device for viruses. */
-	int av_result = virus_scan(rd_only_mtpt);
+	int av_result = is_infected(rd_only_mtpt);
 
 	/* Unmount*/
 	if (unmount(rd_only_mtpt) == -1) {
