@@ -76,7 +76,7 @@ static void handle_device(struct udev_device *device,
 			devnode, manufacturer, product, mount_pt,
 			ro == 1 ? "read-only" : "read-write");
 
-		if (samba_share(mount_pt, manufacturer, product))
+		if (samba_share(mount_pt, manufacturer, product) != -1)
 			log_fn("Shared %s on the samba network.", mount_pt);
 
 		if (has_unmounted(mount_pt)) {

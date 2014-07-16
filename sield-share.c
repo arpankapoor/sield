@@ -9,162 +9,172 @@
 
 static const char *SMB_FILE = "/etc/samba/smb.conf";
 static const char *SMB_FILE_BAK = "/etc/samba/smb.conf.bak";
+
 static int backup_smb_file(void);
-static int write_smbconf(const char *path,
-	const char *manufacturer, const char *product);
+static int write_smbconf(const char *path, const char *manufacturer,
+                         const char *product);
 static int restart_daemon(const char *name);
 static int restart_daemon_alt(const char *name);
 
-/*
- * Write custom smb.conf file
- * and restart samba daemon.
- */
-int samba_share(const char *path,
-	const char *manufacturer, const char *product)
+/* Write custom smb.conf file and restart samba daemon. */
+int samba_share(const char *path, const char *manufacturer,
+                const char *product)
 {
-	return write_smbconf(path, manufacturer, product)
-		&& restart_daemon("smbd")
-		&& restart_daemon("nmbd");
+    if ((write_smbconf(path, manufacturer, product) != 0)
+        || (restart_daemon("smbd") != 0)
+        || (restart_daemon("nmbd") != 0)) {
+        return -1;
+    } else {
+        return 0;
+    }
 }
 
+/* Restore original smb.conf */
 int restore_smb_conf(void)
 {
-	if (rename(SMB_FILE_BAK, SMB_FILE) == -1) {
-		log_fn("%s", strerror(errno));
-		log_fn("Unable to restore smb.conf");
-		return 0;
-	}
+    if (rename(SMB_FILE_BAK, SMB_FILE) == -1) {
+        log_fn("%s", strerror(errno));
+        log_fn("Unable to restore smb.conf");
+        return -1;
+    }
 
-	return 1;
+    return 0;
 }
 
-/*
- * Return 1 if smb.conf file is backed up,
- * else return 0.
- */
+/* Backup smb.conf file */
 static int backup_smb_file(void)
 {
-	/*
-	 * TODO: smb.conf may also reside at
-	 * 1. /usr/local/samba/lib/smb.conf
-	 * 2. /usr/samba/lib/smb.conf
-	 */
-	if (rename(SMB_FILE, SMB_FILE_BAK) == -1) {
-		log_fn("%s", strerror(errno));
-		log_fn("Unable to backup samba configuration file \"%s\".", SMB_FILE);
-		return 0;
-	}
+    /*
+     * TODO: smb.conf may also reside at
+     * 1) /usr/local/samba/lib/smb.conf
+     * 2) /usr/samba/lib/smb.conf
+     *
+     * according to samba(8).
+     */
+    if (rename(SMB_FILE, SMB_FILE_BAK) == -1) {
+        log_fn("%s", strerror(errno));
+        log_fn("Unable to backup samba configuration file \"%s\".", SMB_FILE);
+        return -1;
+    }
 
-	return 1;
+    return 0;
 }
 
 /*
  * Write smb.conf to share given path
  * (after backing up the old smb.conf)
  *
- * Return 1 on success, else return 0.
+ * Return 0 on success, -1 on error.
  */
-static int write_smbconf(const char *path,
-	const char *manufacturer, const char *product)
+static int write_smbconf(const char *path, const char *manufacturer,
+                         const char *product)
 {
-	/* Backup old smb file. */
-	if (! backup_smb_file()) return 0;
+    char *workgroup = NULL;
+    char *hosts_allow = NULL;
+    FILE *smb = NULL;
 
-	FILE *smb = fopen(SMB_FILE, "w");
-	if (! smb) {
-		log_fn("Unable to open \"%s\" for writing.", SMB_FILE);
-		return 0;
-	}
+    /* Backup old smb file. */
+    if (backup_smb_file() == -1) return -1;
 
-	fprintf(smb, "[global]\n");
-	char *workgroup = get_sield_attr("workgroup");
-	if (workgroup) {
-		fprintf(smb, "workgroup = %s\n", workgroup);
-		free(workgroup);
-	}
+    smb = fopen(SMB_FILE, "w");
+    if (smb == NULL) {
+        log_fn("Unable to open \"%s\" for writing.", SMB_FILE);
+        return -1;
+    }
 
-	char *hosts_allow = get_sield_attr("hosts allow");
-	if (hosts_allow) {
-		fprintf(smb, "hosts allow = %s\n", get_sield_attr("hosts allow"));
-		free(hosts_allow);
-	}
-	
-	fprintf(smb, "log file = /var/log/samba/log.%%m\n");
-	fprintf(smb, "server string = USB Share\n");
+    fprintf(smb, "[global]\n");
+    workgroup = get_sield_attr("workgroup");
+    if (workgroup != NULL) {
+        fprintf(smb, "workgroup = %s\n", workgroup);
+        free(workgroup);
+    }
 
-	/* Local settings */
-	fprintf(smb, "[%s %s]\n", manufacturer, product);
-	fprintf(smb, "path = %s\n", path);
-	fprintf(smb, "browseable = yes\n");
+    hosts_allow = get_sield_attr("hosts allow");
+    if (hosts_allow != NULL) {
+        fprintf(smb, "hosts allow = %s\n", get_sield_attr("hosts allow"));
+        free(hosts_allow);
+    }
 
-	int ro = get_sield_attr_int("read only");
-	fprintf(smb, "read only = ");
+    fprintf(smb, "log file = /var/log/samba/log.%%m\n");
+    fprintf(smb, "server string = USB Share\n");
 
-	if (ro == 0) fprintf(smb, "no\n");
-	else fprintf(smb, "yes\n");
+    /* Local settings */
+    fprintf(smb, "[%s %s]\n", manufacturer, product);
+    fprintf(smb, "path = %s\n", path);
+    fprintf(smb, "browseable = yes\n");
 
-	fclose(smb);
-	return 1;
+    fprintf(smb, "read only = ");
+
+    if (get_sield_attr_int("read only") == 0) fprintf(smb, "no\n");
+    else fprintf(smb, "yes\n");
+
+    fclose(smb);
+    return 0;
 }
 
 /*
  * Restart the given daemon.
  *
- * Return 1 on success, else return 0.
+ * Return 0 on success, else return -1.
  */
 static int restart_daemon(const char *name)
 {
-	/*
-	 * Try sending a SIGHUP to the running process.
-	 * (find $name.pid in /run)
-	 *
-	 * if this fails, run "$name restart".
-	 */
+    pid_t pid = 0;
+    char *pid_file = NULL;
+    FILE *pid_fp = NULL;
 
-	char *pid_file = NULL;
-	if (asprintf(&pid_file, "/run/%s.pid", name) == -1) return 0;
+    /*
+     * Try sending a SIGHUP to the running process.
+     * (find $name.pid in /var/run)
+     *
+     * if this fails, run "$name restart".
+     */
+    if (asprintf(&pid_file, "/var/run/%s.pid", name) == -1) {
+        log_fn("asprintf(): Memory error");
+        return -1;
+    }
 
-	FILE *pid_fp = fopen(pid_file, "r");
-	if (! pid_fp) {
-		log_fn("Can't open \"%s\" for reading.", pid_file);
-		return restart_daemon_alt(name);
-	}
+    pid_fp = fopen(pid_file, "r");
+    if (pid_fp == NULL) {
+        log_fn("Can't open %s for reading.", pid_file);
+        return restart_daemon_alt(name);
+    }
 
-	free(pid_file);
+    free(pid_file);
 
-	pid_t pid = 0;
-	if (fscanf(pid_fp, "%d", &pid) != 1) {
-		log_fn("Can't read pid from \"%s\".", pid_file);
-		return restart_daemon_alt(name);
-	}
+    if (fscanf(pid_fp, "%d", &pid) != 1) {
+        log_fn("Can't read pid from %s.", pid_file);
+        return restart_daemon_alt(name);
+    }
 
-	if (kill(pid, SIGHUP) == -1) {
-		log_fn("Couldn't send SIGHUP to PID %d: %s", pid, strerror(errno));
-		return restart_daemon_alt(name);
-	} else {
-		log_fn("Sent SIGHUP to PID %d (%s).", pid, name);
-		return 1;
-	}
+    if (kill(pid, SIGHUP) == -1) {
+        log_fn("Couldn't send SIGHUP to PID %d: %s", pid, strerror(errno));
+        return restart_daemon_alt(name);
+    } else {
+        log_fn("Sent SIGHUP to PID %d (%s).", pid, name);
+        return 0;
+    }
 }
 
 /*
- * Restart smbd from sh
+ * Restart any daemon from sh
+ *
+ * Return 0 on success, -1 on error.
  */
 static int restart_daemon_alt(const char *name)
 {
-	char *cmd = NULL;
-	if (asprintf(&cmd, "%s restart", name) == -1) {
-		log_fn("memory error");
-		return 0;
-	}
+    int ret = -1;
+    char *cmd = NULL;
+    if (asprintf(&cmd, "%s restart", name) == -1) {
+        log_fn("memory error");
+        return -1;
+    }
 
-	if (system(cmd) != 0) {
-		log_fn("Failed to restart %s.", name);
-		free(cmd);
-		return 0;
-	} else {
-		log_fn("Restarted %s.", name);
-		free(cmd);
-		return 1;
-	}
+    ret = system(cmd);
+
+    if (ret != 0) log_fn("Failed to restart %s.", name);
+    else log_fn("Restarted %s.", name);
+
+    free(cmd);
+    return ret;
 }
