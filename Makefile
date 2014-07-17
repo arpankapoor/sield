@@ -23,7 +23,7 @@ sield-passwd-gui.o: sield-passwd-gui.c
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -c -o $@ $^
 
 install:
-	cp 999-sield-prevent-automount.rules /etc/udev/rules.d/
+	cp sield.conf /etc/
 
 clean:
 	rm -f *.o
