@@ -15,10 +15,6 @@
 static const char *PROC_MOUNTS = "/proc/mounts";
 
 static char *get_mount_point_attr(struct udev_device *device);
-char *mount_device(struct udev_device *device, int ro);
-int unmount(const char *target);
-int is_mounted(const char *devpath);
-int has_unmounted(const char *devpath);
 
 static char *get_mount_point_attr(struct udev_device *device)
 {
@@ -87,17 +83,6 @@ char *mount_device(struct udev_device *device, int ro)
 	return target;
 }
 
-/* Wrapper for umount. */
-int unmount(const char *target)
-{
-	if (umount(target) == -1) {
-		log_fn("Unable to unmount %s: %s", target, strerror(errno));
-		return -1;
-	}
-
-	return 0;
-}
-
 /*
  * Given a device node file name,
  * return its mount point from the PROC_MOUNTS file.
@@ -140,35 +125,40 @@ char *get_mountpoint(const char *devnode)
 }
 
 /*
- * Waits for the user to unmount given device.
+ * Wait until given device node file is unmounted.
  *
  * Return 1 when given device is unmounted, else return 0.
  */
-int has_unmounted(const char *devpath)
+int has_unmounted(const char *devnode)
 {
-	FILE *f = fopen(PROC_MOUNTS, "r");
-	if (! f) {
-		log_fn("Cannot open \"%s\" for reading.", PROC_MOUNTS);
-		return 0;
-	}
+    struct pollfd fds[1];
+    FILE *fp = NULL;
 
-	struct pollfd fds[1];
-	fds[0].fd = fileno(f);
-	fds[0].events = POLLPRI;
+    fp = fopen(PROC_MOUNTS, "r");
+    if (fp == NULL) {
+        log_fn("fopen(): %s: %s", PROC_MOUNTS, strerror(errno));
+        return 0;
+    }
 
-	while (1) {
-		int change;
+    fds[0].fd = fileno(fp);
+    fds[0].events = POLLPRI;
 
-		/* BLOCK till device is unmounted. */
-		change = poll(fds, 1, -1);
-		if (change == -1) {
-			log_fn("%s", strerror(errno));
-			return 0;
-		}
+    while (1) {
+        int change;
+        char *mountpoint = NULL;
 
-		if (! is_mounted(devpath)) {
-			fclose(f);
-			return 1;
-		}
-	}
+        /* BLOCK till device is unmounted. */
+        change = poll(fds, 1, -1);
+        if (change == -1) {
+            log_fn("poll(): %s", strerror(errno));
+            return 0;
+        }
+
+        mountpoint = get_mountpoint(devnode);
+        if (mountpoint != NULL) {
+            free(mountpoint);
+            fclose(fp);
+            return 1;
+        }
+    }
 }
