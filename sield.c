@@ -1,3 +1,12 @@
+#include <errno.h>              /* errno */
+#include <libudev.h>            /* udev */
+#include <stdlib.h>             /* exit() */
+#include <string.h>             /* strcmp() */
+#include <sys/mount.h>          /* umount() */
+#include <unistd.h>             /* getpid() */
+#include "sield-config.h"       /* get_sield_attr_int() */
+#include "sield-daemon.h"       /* become_daemon() */
+
 #include <libudev.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,190 +23,207 @@
 #include "sield-udev-helper.h"
 
 static void handle_device(struct udev_device *device,
-		struct udev_device *parent)
+                          struct udev_device *parent)
 {
-	/* Log device information. */
-	log_block_device_info(device, parent);
+    /* Log device information. */
+    log_block_device_info(device, parent);
 
-	/***********************
-	    Basic device info.
-	 ***********************/
-	const char *devnode =
-		udev_device_get_devnode(device);
+    /***********************
+     * Basic device info.
+    ***********************/
+    const char *devnode = udev_device_get_devnode(device);
+    const char *manufacturer = udev_device_get_sysattr_value(parent, "manufacturer");
+    const char *product = udev_device_get_sysattr_value(parent, "product");
+    /**********************/
 
-	const char *manufacturer =
-		udev_device_get_sysattr_value(parent, "manufacturer");
+    /* Incorrect password is given. */
+    if (ask_passwd(manufacturer, product, devnode) != 1) return;
 
-	const char *product =
-		udev_device_get_sysattr_value(parent, "product");
+    /* Mount as read-only for virus scan */
+    /* TODO: Mount at a temporary directory */
+    char *rd_only_mtpt = mount_device(device, 1);
+    if (rd_only_mtpt)
+        log_fn("Mounted %s (%s %s) at %s as read-only for virus scan.",
+               devnode, manufacturer, product, rd_only_mtpt);
+    else return;
 
-	/**********************/
+    /* Scan the device for viruses. */
+    int av_result = is_infected(rd_only_mtpt);
 
-	/* Incorrect password is given. */
-	if (! ask_passwd(manufacturer, product, devnode)) return;
+    /* Unmount*/
+    if (umount(rd_only_mtpt) == -1) {
+        free(rd_only_mtpt);
+        return;
+    } else {
+        log_fn("Unmounted %s", rd_only_mtpt);
+        free(rd_only_mtpt);
+    }
 
-	/* Mount as read-only for virus scan */
-	/* TODO: Mount at a temporary directory */
-	char *rd_only_mtpt = mount_device(device, 1);
-	if (rd_only_mtpt)
-		log_fn("Mounted %s (%s %s) at %s as read-only for virus scan.",
-			devnode, manufacturer, product, rd_only_mtpt);
-	else return;
+    /*
+     * Either
+     * 1. Virus(es) found.
+     *  OR
+     * 2. Error(s) occurred.
+     */
+    if (av_result != 0) return;
 
-	/* Scan the device for viruses. */
-	int av_result = is_infected(rd_only_mtpt);
+    /* Check if mount should be read-only */
+    long int ro = get_sield_attr_int("read only");
+    if (ro == -1) ro = 1;
 
-	/* Unmount*/
-	if (unmount(rd_only_mtpt) == -1) {
-		free(rd_only_mtpt);
-		return;
-	} else {
-		log_fn("Unmounted %s", rd_only_mtpt);
-		free(rd_only_mtpt);
-	}
+    /* Mount the device */
+    char *mount_pt = mount_device(device, ro);
 
-	/*
-	 * Either
-	 * 1. Virus(es) found.
-	 * 	OR
-	 * 2. Error(s) occurred.
-	 */
-	if (av_result != 0) return;
+    if (mount_pt) {
+        log_fn("Mounted %s (%s %s) at %s as %s.",
+               devnode, manufacturer, product, mount_pt,
+               ro == 1 ? "read-only" : "read-write");
 
-	/* Check if mount should be read-only */
-	long int ro = get_sield_attr_int("read only");
-	if (ro == -1) ro = 1;
+        if (get_sield_attr_int("share") == 1
+            && samba_share(mount_pt, manufacturer, product) != -1)
+            log_fn("Shared %s on the samba network.", mount_pt);
 
-	/* Mount the device */
-	char *mount_pt = mount_device(device, ro);
+        if (has_unmounted(mount_pt)) {
+            log_fn("%s was unmounted.", devnode);
+            if (restore_smb_conf()) log_fn("Restored smb.conf");
+        }
 
-	if (mount_pt) {
-		log_fn("Mounted %s (%s %s) at %s as %s.",
-			devnode, manufacturer, product, mount_pt,
-			ro == 1 ? "read-only" : "read-write");
-
-		if (samba_share(mount_pt, manufacturer, product) != -1)
-			log_fn("Shared %s on the samba network.", mount_pt);
-
-		if (has_unmounted(mount_pt)) {
-			log_fn("%s was unmounted.", devnode);
-			if (restore_smb_conf()) log_fn("Restored smb.conf");
-		}
-
-		free(mount_pt);
-	}
+        free(mount_pt);
+    }
 }
 
-int main(int argc, char **argv)
+int main(int argc, char *argv[])
 {
-	if (become_daemon() == -1) {
-		log_fn("Daemon creation failed. Quitting.");
-		exit(EXIT_FAILURE);
-	}
+    struct udev *udev = NULL;
+    struct udev_monitor *monitor = NULL;
+    struct udev_enumerate *enumerate = NULL;
+    struct udev_list_entry *devices_list = NULL;
+    struct udev_list_entry *dev_list_entry = NULL;
+    struct udev_device *device = NULL;
+    struct udev_device *parent = NULL;
 
-	struct udev *udev = udev_new();
-	udev_set_log_fn(udev, udev_custom_log_fn);
+    /* TODO: Delete pid file on exit */
+    if (become_daemon() == -1) {
+        log_fn("SysV daemon creation failed. Quitting.");
+        exit(EXIT_FAILURE);
+    }
 
-	/* Monitor block devices */
-	struct udev_monitor *monitor = monitor_device_with_subsystem_devtype(
-					udev, "udev", "block", "partition");
-	if (! monitor) {
-		log_fn("Failed to initialize udev monitor. Quitting.");
-		exit(EXIT_FAILURE);
-	}
+    /* Daemon creation successful */
+    log_fn("Started daemon with PID %ld.", (long int)getpid());
 
-	/* List and handle all devices that are already plugged in. */
-	struct udev_enumerate *enumerate = udev_enumerate_new(udev);
-	udev_enumerate_add_match_subsystem(enumerate, "block");
-	udev_enumerate_scan_devices(enumerate);
-	struct udev_list_entry *devices = udev_enumerate_get_list_entry(enumerate);
-	struct udev_list_entry *dev_list_entry;
+    udev = udev_new();
+    if (udev == NULL) {
+        log_fn("udev object not created. Quitting.");
+        exit(EXIT_FAILURE);
+    }
 
-	udev_list_entry_foreach(dev_list_entry, devices) {
-		const char *path = udev_list_entry_get_name(dev_list_entry);
-		struct udev_device *dev = udev_device_new_from_syspath(udev, path);
+    /* Custom logging function */
+    udev_set_log_fn(udev, udev_custom_log_fn);
 
-		const char *devtype = udev_device_get_devtype(dev);
-		const char *devnode = udev_device_get_devnode(dev);
+    /* Monitor block devices with a partition */
+    monitor = monitor_device_with_subsystem_devtype(
+                udev, "udev", "block", "partition");
+    if (monitor == NULL) {
+        log_fn("Failed to initialize udev monitor. Quitting.");
+        udev_unref(udev);
+        exit(EXIT_FAILURE);
+    }
 
-		/* Ignore devices other than partitions. */
-		if (strcmp(devtype, "partition")) continue;
+    /* Device monitor setup successfully. */
+    log_fn("Device monitor setup successfully.");
 
-		/* Ensure it is a usb device. */
-		struct udev_device *parent = udev_device_get_parent_with_subsystem_devtype(
-				dev, "usb", "usb_device");
-		if (! parent) {
-			udev_device_unref(dev);
-			continue;
-		}
+    /* List and handle all devices that are already plugged in. */
+    enumerate = enumerate_devices_with_subsystem(udev, "block");
+    devices_list = udev_enumerate_get_list_entry(enumerate);
 
-		/*
-		 * If device is already mounted & remount is set to 1,
-		 * unmount the device and use SIELD for mounting.
-		 */
-		if (is_mounted(devnode)) {
-			long int remount = get_sield_attr_int("remount");
-			if (remount != 1) {
-				log_fn("%s is mounted, but remount conifguration not set. "
-					"Ignoring device.", devnode);
-				udev_device_unref(dev);
-				continue;
-			}
+    udev_list_entry_foreach(dev_list_entry, devices_list) {
+        char *mountpoint = NULL;
+        const char *devnode = NULL;
 
-			char *mt_pt = get_mount_point(devnode);
-			if (unmount(mt_pt) == -1) {
-				udev_device_unref(dev);
-				free(mt_pt);
-				continue;
-			} else {
-				log_fn("Unmounted %s from %s.", devnode, mt_pt);
-				free(mt_pt);
-			}
-		}
+        device = udev_device_new_from_syspath(
+                    udev, udev_list_entry_get_name(dev_list_entry));
 
-		handle_device(dev, parent);
+        /* Handle device only if it has a mountable partition. */
+        if (strcmp(udev_device_get_devtype(device), "partition") != 0) {
+            udev_device_unref(device);
+            continue;
+        }
 
-		udev_device_unref(dev);
-	}
+        /* Ensure it a USB device. */
+        parent = udev_device_get_parent_with_subsystem_devtype(
+                    device, "usb", "usb_device");
 
-	while (1) {
-		/* Check if enabled. */
-		if (get_sield_attr_int("enable") != 1) {
-			sleep(1);
-			delete_udev_rule();
-			continue;
-		}
+        if (parent == NULL) {
+            udev_device_unref(device);
+            continue;
+        }
 
-		write_udev_rule();
+        devnode = udev_device_get_devnode(device);
+        mountpoint = get_mountpoint(devnode);
 
-		/*
-		 * Receive udev_device for any "block" device which was
-		 * plugged in ("add"ed) to the system.
-		 */
-		struct udev_device *device = receive_device_with_action(
-						monitor, "add");
-		if (! device) {
-			sleep(1);
-			continue;
-		}
+        /* Device is already mounted */
+        if (mountpoint != NULL) {
+            /* Check if "remount" configuration is set */
+            if (get_sield_attr_int("remount") == 1) {
+                /* Unmount device */
+                if (umount(mountpoint) == -1) {
+                    log_fn("umount(): %s: %s", mountpoint, strerror(errno));
+                    udev_device_unref(device);
+                    continue;
+                } else {
+                    log_fn("Unmounted %s (%s)", mountpoint, devnode);
+                }
+            } else {
+                log_fn("Ignoring %s mounted at %s", devnode, mountpoint);
+            }
 
-		/* The device should be using USB */
-		struct udev_device *parent = udev_device_get_parent_with_subsystem_devtype(
-						device, "usb", "usb_device");
-		if (! parent) {
-			udev_device_unref(device);
-			sleep(1);
-			continue;
-		}
+            free(mountpoint);
+        }
 
-		/* Take care of the device. */
-		handle_device(device, parent);
+        handle_device(device, parent);
 
-		/* Parent will also be cleaned up */
-		udev_device_unref(device);
-	}
+        udev_device_unref(device);
+    }
 
-	udev_monitor_unref(monitor);
-	udev_unref(udev);
-	return 0;
+    udev_enumerate_unref(enumerate);
+
+    while (1) {
+        /* Check if enabled. */
+        if (get_sield_attr_int("enable") != 1) {
+            sleep(1);
+            delete_udev_rule();
+            continue;
+        }
+
+        write_udev_rule();
+
+        /*
+         * Receive udev_device for any "block" device which was
+         * plugged in ("add"ed) to the system.
+         */
+        device = receive_device_with_action(monitor, "add");
+        if (device == NULL) {
+            sleep(1);
+            continue;
+        }
+
+        /* The device should be using USB */
+        parent = udev_device_get_parent_with_subsystem_devtype(
+                    device, "usb", "usb_device");
+        if (parent == NULL) {
+            udev_device_unref(device);
+            sleep(1);
+            continue;
+        }
+
+        /* Take care of the device. */
+        handle_device(device, parent);
+
+        /* Parent will also be cleaned up */
+        udev_device_unref(device);
+    }
+
+    udev_monitor_unref(monitor);
+    udev_unref(udev);
+    return 0;
 }
