@@ -5,7 +5,7 @@
 
 /* udev helper functions */
 struct udev_enumerate *enumerate_devices_with_subsystem(
-        struct udev *udev, const char *subsystem)
+        struct udev *udev, const char *subsystem);
 
 struct udev_monitor *monitor_device_with_subsystem_devtype(
         struct udev *udev, const char *event_source,
