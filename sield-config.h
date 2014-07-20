@@ -8,9 +8,4 @@ char *get_sield_attr(const char *name);
 char *get_sield_attr_no_log(const char *name);
 long int get_sield_attr_int(const char *name);
 
-/*
- * Set an attribute.
- */
-int set_sield_attr(const char *name, const char *value);
-
 #endif

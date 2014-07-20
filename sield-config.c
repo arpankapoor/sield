@@ -19,8 +19,6 @@ static char *get_sield_attr_base(const char *name, int log);
 char *get_sield_attr(const char *name);
 char *get_sield_attr_no_log(const char *name);
 long int get_sield_attr_int(const char *name);
-static int remove_sield_attr(const char *name);
-int set_sield_attr(const char *name, const char *value);
 
 /*
  * Return pointer to string without trailing or whitespace at
@@ -164,95 +162,4 @@ long int get_sield_attr_int(const char *name)
 
 	free(value_str);
 	return value;
-}
-
-/*
- * Remove all occurrences of given attribute from the config file.
- *
- * Return 1 on success, else return 0.
- */
-static int remove_sield_attr(const char *name)
-{
-	FILE *config_fp = fopen(config_file, "r");
-	if (! config_fp) {
-		log_fn("Unable to open config file for reading.");
-		return 0;
-	}
-
-	FILE *config_fp_new = fopen(config_file_new, "w");
-	if (! config_fp_new) {
-		log_fn("Unable to create file %s.", config_file_new);
-		return 0;
-	}
-
-	const char *delim = "=";
-	char *value = NULL;
-	char *line = NULL;
-	size_t len = 0;
-
-	while (! value
-		&& getline(&line, &len, config_fp) != -1) {
-
-		/* Skip empty lines. */
-		if (line[0] == '\n') continue;
-
-		/* Write comments as is. */
-		if (line[0] == '#') {
-			fprintf(config_fp_new, "%s", line);
-			continue;
-		}
-
-		char *line_ptr = line;
-
-		char *name_t = seperate_line_into_name_value(&line_ptr, delim);
-		char *value_t = line_ptr;
-
-		/* Skip lines that describe given attribute. */
-		if (! strcmp(name_t, name)) continue;
-
-		if (name_t && value_t)
-			fprintf(config_fp_new, "\n%s = %s\n", name_t, value_t);
-	}
-
-	/* Clean up */
-	if (line) free(line);
-	fclose(config_fp);
-	fclose(config_fp_new);
-
-	/* Replace with new file. */
-	int suc = rename(config_file_new, config_file);
-
-	/* rename(3) returns 0 on success. */
-	return ! suc;
-}
-
-/*
- * Set the value of given attribute name.
- *
- * Remove any occurrence of given attribute (if present)
- * before setting new value.
- *
- * Return 1 if writing attribute was successful,
- * else return 0.
- */
-int set_sield_attr(const char *name, const char *value)
-{
-	/* Remove all occurrences of the given attribute if present. */
-	char *prev_value = get_sield_attr(name);
-	if (prev_value) {
-		remove_sield_attr(name);
-		free(prev_value);
-	}
-
-	FILE *config_fp = fopen(config_file, "a");
-	if (! config_fp) {
-		log_fn("Unable to open config file for appending.");
-		return 0;
-	}
-
-	/* Ensure that we are on a new line before writing. */
-	fprintf(config_fp, "\n%s = %s\n", name, value);
-
-	fclose(config_fp);
-	return 1;
 }
