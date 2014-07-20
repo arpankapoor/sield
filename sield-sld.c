@@ -99,7 +99,7 @@ int main(int argc, char *argv[])
     /* Ask for choice if more than 1 device exists. */
     if (fifos > 1) {
         printf("Enter your choice: ");
-        if (scanf("%d", &choice) != 1) {
+        if ((scanf("%d", &choice) != 1) || (choice <= 0) || (choice > fifos)) {
             log("Invalid choice given.\n");
             fprintf(stderr, "Invalid choice.\n");
             goto error;
