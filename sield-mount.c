@@ -1,10 +1,10 @@
-#define _GNU_SOURCE		/* asprintf() */
+#define _GNU_SOURCE     /* asprintf(), getline(), strdup() */
 #include <errno.h>		/* errno */
 #include <libudev.h>
 #include <poll.h>
-#include <stdio.h>		/* asprintf() */
-#include <stdlib.h>		/* free() */
-#include <string.h>		/* strdup() */
+#include <stdio.h>      /* fopen(), asprintf() */
+#include <stdlib.h>     /* free() */
+#include <string.h>     /* strcmp(), strdup() */
 #include <sys/mount.h>		/* mount() */
 #include <sys/stat.h>		/* mkdir() */
 
@@ -18,7 +18,6 @@ static char *get_mount_point_attr(struct udev_device *device);
 char *mount_device(struct udev_device *device, int ro);
 int unmount(const char *target);
 int is_mounted(const char *devpath);
-char *get_mount_point(const char *devpath);
 int has_unmounted(const char *devpath);
 
 static char *get_mount_point_attr(struct udev_device *device)
@@ -100,76 +99,44 @@ int unmount(const char *target)
 }
 
 /*
- * Check if given device is present in the
- * PROC_MOUNTS file.
+ * Given a device node file name,
+ * return its mount point from the PROC_MOUNTS file.
  *
- * Return 1 if present, else return 0.
+ * Return NULL if not mounted.
  */
-int is_mounted(const char *devpath)
+char *get_mountpoint(const char *devnode)
 {
-	FILE *mount_fp = fopen(PROC_MOUNTS, "r");
-	if (! mount_fp) {
-		log_fn("Cannot open \"%s\" for reading.", PROC_MOUNTS);
-		return 0;
-	}
+    size_t len = 0;
+    char *mountpoint = NULL;
+    char *line = NULL;
+    FILE *fp = NULL;
 
-	char *line = NULL;
-	size_t len = 0;
-	int ret = 1;
+    fp = fopen(PROC_MOUNTS, "r");
+    if (fp == NULL) {
+        log_fn("fopen(): %s: %s", PROC_MOUNTS, strerror(errno));
+        return NULL;
+    }
 
-	while (getline(&line, &len, mount_fp) != -1) {
-		char *device = NULL;
+    while (getline(&line, &len, fp) != -1
+            && mountpoint == NULL) {
+        char *dev = NULL;
+        char *mtpt = NULL;
 
-		/* %m modifier for dynamic string allocation. */
-		sscanf(line, "%ms", &device);
-		ret = strcmp(device, devpath);
-		if (device) free(device);
+        /* %m modifier for dynamic string allocation. */
+        sscanf(line, "%ms %ms", &dev, &mtpt);
 
-		if (ret == 0) break;
-	}
+        /* Is this the device we are looking for? */
+        if (strcmp(dev, devnode) == 0 && mtpt != NULL)
+            mountpoint = strdup(mtpt);
 
-	if (line) free(line);
-	fclose(mount_fp);
+        if (dev) free(dev);
+        if (mtpt) free(mtpt);
+    }
 
-	return ret == 0;
-}
+    if (line) free(line);
+    fclose(fp);
 
-/*
- * Return given device's mount point from the
- * PROC_MOUNTS file.
- */
-char *get_mount_point(const char *devpath)
-{
-	FILE *mount_fp = fopen(PROC_MOUNTS, "r");
-	if (! mount_fp) {
-		log_fn("Cannot open \"%s\" for reading.", PROC_MOUNTS);
-		return 0;
-	}
-
-	char *mt_pt_copy = NULL;
-	char *line = NULL;
-	size_t len = 0;
-	int found = 0;
-
-	while (getline(&line, &len, mount_fp) != -1) {
-		char *device = NULL, *mt_pt = NULL;
-
-		/* %m modifier for dynamic string allocation. */
-		sscanf(line, "%ms %ms", &device, &mt_pt);
-		found = (strcmp(device, devpath) == 0);
-		if (device) free(device);
-
-		if (found) {
-			mt_pt_copy = strdup(mt_pt);
-			free(mt_pt);
-			break;
-		}
-	}
-
-	if (line) free(line);
-	fclose(mount_fp);
-
-	return mt_pt_copy;
+    return mountpoint;
 }
 
 /*
