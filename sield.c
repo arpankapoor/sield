@@ -1,17 +1,13 @@
 #include <errno.h>              /* errno */
 #include <libudev.h>            /* udev */
-#include <stdlib.h>             /* exit() */
+#include <stdlib.h>             /* free(), exit() */
 #include <string.h>             /* strcmp() */
 #include <sys/mount.h>          /* umount() */
 #include <unistd.h>             /* getpid() */
 #include "sield-config.h"       /* get_sield_attr_int() */
 #include "sield-daemon.h"       /* become_daemon() */
 
-#include <libudev.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 
 #include "sield-av.h"
 #include "sield-config.h"
@@ -98,48 +94,19 @@ static void handle_device(struct udev_device *device,
     }
 }
 
-int main(int argc, char *argv[])
+static int handle_plugged_in_devices(
+        struct udev *udev, const char *subsystem, const char *devtype)
 {
-    struct udev *udev = NULL;
-    struct udev_monitor *monitor = NULL;
+    struct udev_device *device = NULL;
+    struct udev_device *parent = NULL;
     struct udev_enumerate *enumerate = NULL;
     struct udev_list_entry *devices_list = NULL;
     struct udev_list_entry *dev_list_entry = NULL;
-    struct udev_device *device = NULL;
-    struct udev_device *parent = NULL;
-
-    /* TODO: Delete pid file on exit */
-    if (become_daemon() == -1) {
-        log_fn("SysV daemon creation failed. Quitting.");
-        exit(EXIT_FAILURE);
-    }
-
-    /* Daemon creation successful */
-    log_fn("Started daemon with PID %ld.", (long int)getpid());
-
-    udev = udev_new();
-    if (udev == NULL) {
-        log_fn("udev object not created. Quitting.");
-        exit(EXIT_FAILURE);
-    }
-
-    /* Custom logging function */
-    udev_set_log_fn(udev, udev_custom_log_fn);
-
-    /* Monitor block devices with a partition */
-    monitor = monitor_device_with_subsystem_devtype(
-                udev, "udev", "block", "partition");
-    if (monitor == NULL) {
-        log_fn("Failed to initialize udev monitor. Quitting.");
-        udev_unref(udev);
-        exit(EXIT_FAILURE);
-    }
-
-    /* Device monitor setup successfully. */
-    log_fn("Device monitor setup successfully.");
 
     /* List and handle all devices that are already plugged in. */
-    enumerate = enumerate_devices_with_subsystem(udev, "block");
+    enumerate = enumerate_devices_with_subsystem(udev, subsystem);
+    if (enumerate == NULL) return -1;
+
     devices_list = udev_enumerate_get_list_entry(enumerate);
 
     udev_list_entry_foreach(dev_list_entry, devices_list) {
@@ -150,7 +117,7 @@ int main(int argc, char *argv[])
                     udev, udev_list_entry_get_name(dev_list_entry));
 
         /* Handle device only if it has a mountable partition. */
-        if (strcmp(udev_device_get_devtype(device), "partition") != 0) {
+        if (strcmp(udev_device_get_devtype(device), devtype) != 0) {
             udev_device_unref(device);
             continue;
         }
@@ -192,6 +159,49 @@ int main(int argc, char *argv[])
     }
 
     udev_enumerate_unref(enumerate);
+
+    return 0;
+}
+
+int main(int argc, char *argv[])
+{
+    struct udev *udev = NULL;
+    struct udev_monitor *monitor = NULL;
+    struct udev_device *device = NULL;
+    struct udev_device *parent = NULL;
+
+    /* TODO: Delete pid file on exit */
+    if (become_daemon() == -1) {
+        log_fn("SysV daemon creation failed. Quitting.");
+        exit(EXIT_FAILURE);
+    }
+
+    /* Daemon creation successful */
+    log_fn("Started daemon with PID %ld.", (long int)getpid());
+
+    udev = udev_new();
+    if (udev == NULL) {
+        log_fn("udev object not created. Quitting.");
+        exit(EXIT_FAILURE);
+    }
+
+    /* Custom logging function */
+    udev_set_log_fn(udev, udev_custom_log_fn);
+
+    /* Monitor block devices with a partition */
+    monitor = monitor_device_with_subsystem_devtype(
+                udev, "udev", "block", "partition");
+    if (monitor == NULL) {
+        log_fn("Failed to initialize udev monitor. Quitting.");
+        udev_unref(udev);
+        exit(EXIT_FAILURE);
+    }
+
+    /* Device monitor setup successfully. */
+    log_fn("Device monitor setup successfully.");
+
+
+    handle_plugged_in_devices(udev, "block", "partition");
 
     while (1) {
         /* Check if enabled. */
