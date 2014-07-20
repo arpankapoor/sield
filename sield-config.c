@@ -8,9 +8,7 @@
 #include "sield-config.h"
 #include "sield-log.h"
 
-
 static const char *config_file = "/etc/sield.conf";
-static const char *config_file_new = "/etc/sield.conf.new";
 
 static char *strip_whitespace(char *str);
 static char *seperate_line_into_name_value(
@@ -156,10 +154,20 @@ long int get_sield_attr_int(const char *name)
 
 	/* The configuration is not written properly. */
 	if (*endptr != '\0') {
-		log_fn("Non-integer characters in the config \"%s", name);
+		log_fn("Non-integer characters in the config \"%s\"", name);
 		value = -1;
 	}
 
 	free(value_str);
 	return value;
+}
+
+/* Return -1 if attribute value is set to anything other than 0 or 1 */
+int get_sield_attr_bool(const char *name)
+{
+    long int ret = get_sield_attr_int(name);
+    if (ret == 1) return 1;
+    if (ret == 0) return 0;
+
+    return -1;
 }
