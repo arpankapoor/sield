@@ -39,37 +39,43 @@ static void handle_device(struct udev_device *device,
     /* Incorrect password is given. */
     if (ask_passwd(manufacturer, product, devnode) != 1) return;
 
-    /* Mount as read-only for virus scan */
-    /* TODO: Mount at a temporary directory */
-    char *rd_only_mtpt = mount_device(device, 1);
-    if (rd_only_mtpt)
-        log_fn("Mounted %s (%s %s) at %s as read-only for virus scan.",
-               devnode, manufacturer, product, rd_only_mtpt);
-    else return;
+    long int scan = get_sield_attr_int("scan");
+    if (scan != 0) scan = 1;
 
-    /* Scan the device for viruses. */
-    int av_result = is_infected(rd_only_mtpt);
+    if (scan == 1) {
 
-    /* Unmount*/
-    if (umount(rd_only_mtpt) == -1) {
-        free(rd_only_mtpt);
-        return;
-    } else {
-        log_fn("Unmounted %s", rd_only_mtpt);
-        free(rd_only_mtpt);
+        /* Mount as read-only for virus scan */
+        /* TODO: Mount at a temporary directory */
+        char *rd_only_mtpt = mount_device(device, 1);
+        if (rd_only_mtpt)
+            log_fn("Mounted %s (%s %s) at %s as read-only for virus scan.",
+                   devnode, manufacturer, product, rd_only_mtpt);
+        else return;
+
+        /* Scan the device for viruses. */
+        int av_result = is_infected(rd_only_mtpt);
+
+        /* Unmount*/
+        if (umount(rd_only_mtpt) == -1) {
+            free(rd_only_mtpt);
+            return;
+        } else {
+            log_fn("Unmounted %s", rd_only_mtpt);
+            free(rd_only_mtpt);
+        }
+
+        /*
+         * Either
+         * 1. Virus(es) found.
+         *  OR
+         * 2. Error(s) occurred.
+         */
+        if (av_result != 0) return;
     }
-
-    /*
-     * Either
-     * 1. Virus(es) found.
-     *  OR
-     * 2. Error(s) occurred.
-     */
-    if (av_result != 0) return;
 
     /* Check if mount should be read-only */
     long int ro = get_sield_attr_int("read only");
-    if (ro == -1) ro = 1;
+    if (ro != 0) ro = 1;
 
     /* Mount the device */
     char *mount_pt = mount_device(device, ro);
