@@ -17,6 +17,7 @@
 
 static char *get_username(uid_t uid);
 static int fifo_filter(const struct dirent *ent);
+static int get_choice(int *choice);
 
 /* Add program name to logging function */
 #define log(format, ...) log_fn("[%s] "format, PROGRAM_NAME, ##__VA_ARGS__)
@@ -47,15 +48,30 @@ static int fifo_filter(const struct dirent *ent)
     else return 0;
 }
 
+static int get_choice(int *choice)
+{
+    char *line = NULL;
+    size_t len = 0;
+
+    if (getline(&line, &len, stdin) == -1) return -1;
+    if (sscanf(line, "%d", choice) != 1) {
+        free(line);
+        return -1;
+    }
+
+    free(line);
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     int fifos = 0, i = 0, choice = 0;
+    int fd = -1;
+    size_t len = 0;
     char *username = NULL;
     char *tty = NULL;
     char *plain_txt_passwd = NULL;
     char *fifo_path = NULL;
-    int fd = -1;
-    size_t len = 0;
     struct dirent **entries = NULL;
     struct auth_len lengths;        /* Structure to send string lengths */
 
@@ -99,11 +115,12 @@ int main(int argc, char *argv[])
     /* Ask for choice if more than 1 device exists. */
     if (fifos > 1) {
         printf("Enter your choice: ");
-        if ((scanf("%d", &choice) != 1) || (choice <= 0) || (choice > fifos)) {
+        if (get_choice(&choice) == -1 || (choice <= 0) || (choice > fifos)) {
             log("Invalid choice given.\n");
             fprintf(stderr, "Invalid choice.\n");
             goto error;
         }
+        choice--;
     } else {
         choice = 0;
     }
@@ -124,7 +141,7 @@ int main(int argc, char *argv[])
             fprintf(stderr, "Device currently unavailable. Try again.\n");
             goto error;
         }
-        log("fopen: %s", strerror(errno));
+        log("fopen(): %s", strerror(errno));
         log("Unable to open %d for writing.", fifo_path);
         fprintf(stderr, "Could not open given choice.\n");
         goto error;
