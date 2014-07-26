@@ -4,52 +4,80 @@
 #include <string.h>             /* strcmp() */
 #include <sys/mount.h>          /* umount() */
 #include <unistd.h>             /* getpid() */
+
 #include "sield-config.h"       /* get_sield_attr_int() */
 #include "sield-daemon.h"       /* become_daemon() */
+#include "sield-log.h"          /* log_fn() */
+#include "sield-udev-helper.h"  /* monitor_device_with_subsystem_devtype() */
 
 #include <stdio.h>
 
 #include "sield-av.h"
-#include "sield-config.h"
-#include "sield-daemon.h"
-#include "sield-log.h"
 #include "sield-mount.h"
 #include "sield-passwd-ask.h"
 #include "sield-share.h"
-#include "sield-udev-helper.h"
+
+static void _handle_device(struct udev_device *device,
+                           struct udev_device *parent);
+static void handle_device(struct udev_device *device,
+                           struct udev_device *parent);
+static int handle_plugged_in_devices(
+        struct udev *udev, const char *subsystem, const char *devtype);
+
 
 static void handle_device(struct udev_device *device,
-                          struct udev_device *parent)
+                           struct udev_device *parent)
 {
-    /* Log device information. */
-    log_block_device_info(device, parent);
+    switch (fork()) {
+        case -1:
+            log_fn("Could not create a new process to handle device %s",
+                   udev_device_get_devnode(device));
+            return;
+        case 0: break;
+        default: return;
+    }
 
-    /***********************
-     * Basic device info.
-    ***********************/
+    /* Child process executes this. */
+    _handle_device(device, parent);
+    exit(EXIT_SUCCESS);
+}
+
+static void _handle_device(struct udev_device *device,
+                           struct udev_device *parent)
+{
+    /*********************/
+    /* Basic device info */
+    /*********************/
     const char *devnode = udev_device_get_devnode(device);
     const char *manufacturer = udev_device_get_sysattr_value(parent, "manufacturer");
     const char *product = udev_device_get_sysattr_value(parent, "product");
     /**********************/
 
+    int scan = get_sield_attr_bool("scan");
+    int readonly = get_sield_attr_bool("read only");
+    char *mount_pt = NULL;
+
+    /* Log device information. */
+    log_block_device_info(device, parent);
+
     /* Incorrect password is given. */
     if (ask_passwd(manufacturer, product, devnode) != 1) return;
 
-    long int scan = get_sield_attr_int("scan");
-    if (scan != 0) scan = 1;
-
-    if (scan == 1) {
+    /* Don't scan iff scan == 0 */
+    if (scan != 0) {
+        char *rd_only_mtpt = NULL;
+        int av_result;
 
         /* Mount as read-only for virus scan */
         /* TODO: Mount at a temporary directory */
-        char *rd_only_mtpt = mount_device(device, 1);
+        rd_only_mtpt = mount_device(device, 1);
         if (rd_only_mtpt)
             log_fn("Mounted %s (%s %s) at %s as read-only for virus scan.",
                    devnode, manufacturer, product, rd_only_mtpt);
         else return;
 
         /* Scan the device for viruses. */
-        int av_result = is_infected(rd_only_mtpt);
+        av_result = is_infected(rd_only_mtpt);
 
         /* Unmount*/
         if (umount(rd_only_mtpt) == -1) {
@@ -69,25 +97,23 @@ static void handle_device(struct udev_device *device,
         if (av_result != 0) return;
     }
 
-    /* Check if mount should be read-only */
-    long int ro = get_sield_attr_int("read only");
-    if (ro != 0) ro = 1;
-
     /* Mount the device */
-    char *mount_pt = mount_device(device, ro);
+    mount_pt = mount_device(device, readonly);
 
     if (mount_pt) {
         log_fn("Mounted %s (%s %s) at %s as %s.",
                devnode, manufacturer, product, mount_pt,
-               ro == 1 ? "read-only" : "read-write");
+               readonly == 1 ? "read-only" : "read-write");
 
-        if (get_sield_attr_int("share") == 1
-            && samba_share(mount_pt, manufacturer, product) != -1)
+        if (get_sield_attr_bool("share") == 1
+            && samba_share(mount_pt, manufacturer, product) != -1) {
+
             log_fn("Shared %s on the samba network.", mount_pt);
 
-        if (has_unmounted(mount_pt)) {
-            log_fn("%s was unmounted.", devnode);
-            if (restore_smb_conf()) log_fn("Restored smb.conf");
+            if (has_unmounted(mount_pt)) {
+                log_fn("%s was unmounted.", devnode);
+                if (restore_smb_conf()) log_fn("Restored smb.conf");
+            }
         }
 
         free(mount_pt);
@@ -97,8 +123,6 @@ static void handle_device(struct udev_device *device,
 static int handle_plugged_in_devices(
         struct udev *udev, const char *subsystem, const char *devtype)
 {
-    struct udev_device *device = NULL;
-    struct udev_device *parent = NULL;
     struct udev_enumerate *enumerate = NULL;
     struct udev_list_entry *devices_list = NULL;
     struct udev_list_entry *dev_list_entry = NULL;
@@ -112,6 +136,8 @@ static int handle_plugged_in_devices(
     udev_list_entry_foreach(dev_list_entry, devices_list) {
         char *mountpoint = NULL;
         const char *devnode = NULL;
+        struct udev_device *device = NULL;
+        struct udev_device *parent = NULL;
 
         device = udev_device_new_from_syspath(
                     udev, udev_list_entry_get_name(dev_list_entry));
@@ -142,6 +168,7 @@ static int handle_plugged_in_devices(
                 if (umount(mountpoint) == -1) {
                     log_fn("umount(): %s: %s", mountpoint, strerror(errno));
                     udev_device_unref(device);
+                    free(mountpoint);
                     continue;
                 } else {
                     log_fn("Unmounted %s (%s)", mountpoint, devnode);
@@ -170,7 +197,7 @@ int main(int argc, char *argv[])
     struct udev_device *device = NULL;
     struct udev_device *parent = NULL;
 
-    /* TODO: Delete pid file on exit */
+    /* TODO: Delete PID file on exit */
     if (become_daemon() == -1) {
         log_fn("SysV daemon creation failed. Quitting.");
         exit(EXIT_FAILURE);
@@ -199,7 +226,6 @@ int main(int argc, char *argv[])
 
     /* Device monitor setup successfully. */
     log_fn("Device monitor setup successfully.");
-
 
     handle_plugged_in_devices(udev, "block", "partition");
 
