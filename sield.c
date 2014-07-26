@@ -1,32 +1,54 @@
 #include <errno.h>              /* errno */
 #include <libudev.h>            /* udev */
+#include <signal.h>             /* sigaction() */
 #include <stdlib.h>             /* free(), exit() */
 #include <string.h>             /* strcmp() */
 #include <sys/mount.h>          /* umount() */
+#include <sys/wait.h>           /* waitpid() */
 #include <unistd.h>             /* getpid() */
 
+#include "sield-av.h"           /* is_infected() */
 #include "sield-config.h"       /* get_sield_attr_int() */
 #include "sield-daemon.h"       /* become_daemon() */
 #include "sield-log.h"          /* log_fn() */
+#include "sield-mount.h"        /* mount_device() */
+#include "sield-passwd-ask.h"   /* ask_passwd() */
+#include "sield-pid.h"          /* rm_pidfile() */
+#include "sield-share.h"        /* samba_share() */
 #include "sield-udev-helper.h"  /* monitor_device_with_subsystem_devtype() */
 
-#include <stdio.h>
-
-#include "sield-av.h"
-#include "sield-mount.h"
-#include "sield-passwd-ask.h"
-#include "sield-share.h"
-
+static void handler(int signum);
 static void _handle_device(struct udev_device *device,
                            struct udev_device *parent);
 static void handle_device(struct udev_device *device,
-                           struct udev_device *parent);
+                          struct udev_device *parent);
 static int handle_plugged_in_devices(
         struct udev *udev, const char *subsystem, const char *devtype);
 
+/* Catch signals */
+static void handler(int signum)
+{
+    if (signum == SIGCHLD) {
+        int status;
 
+        while (waitpid(-1, &status, WNOHANG) > 0) continue;
+        return;
+    }
+
+    if (signum == SIGSEGV || signum == SIGTERM) {
+        if (signum == SIGSEGV) log_fn("Segmentation fault.");
+        if (signum == SIGTERM) log_fn("SIGTERM received.");
+
+        /* cleanup */
+        delete_udev_rule();
+        rm_pidfile();
+        exit(signum);
+    }
+}
+
+/* Create a new process to handle a detected device */
 static void handle_device(struct udev_device *device,
-                           struct udev_device *parent)
+                          struct udev_device *parent)
 {
     switch (fork()) {
         case -1:
@@ -42,6 +64,7 @@ static void handle_device(struct udev_device *device,
     exit(EXIT_SUCCESS);
 }
 
+/* Sequential steps to execute for handling a device */
 static void _handle_device(struct udev_device *device,
                            struct udev_device *parent)
 {
@@ -192,12 +215,25 @@ static int handle_plugged_in_devices(
 
 int main(int argc, char *argv[])
 {
+    size_t i;
+    const int signals[] = {SIGTERM, SIGCHLD, SIGSEGV};
+    struct sigaction action;
     struct udev *udev = NULL;
     struct udev_monitor *monitor = NULL;
     struct udev_device *device = NULL;
     struct udev_device *parent = NULL;
 
-    /* TODO: Delete PID file on exit */
+    /* Setup signal handlers */
+    action.sa_handler = handler;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0;
+
+    /* Assign handler to any signals we care about */
+    for (i = 0; i < sizeof(signals) / sizeof(signals[0]); i++) {
+        int signal = signals[i];
+        sigaction(signal, &action, NULL);
+    }
+
     if (become_daemon() == -1) {
         log_fn("SysV daemon creation failed. Quitting.");
         exit(EXIT_FAILURE);

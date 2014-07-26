@@ -98,8 +98,7 @@ static char *makefifo(const char *manufacturer, const char *product,
 
     /* Create FIFO_DIR to place the named pipes. */
     if (mkdir(FIFO_DIR, dir_perm) == -1 && errno != EEXIST) {
-        log_fn("mkdir: %s", strerror(errno));
-        log_fn("Unable to create directory %s.", FIFO_DIR);
+        log_fn("mkdir(): %s: %s", FIFO_DIR, strerror(errno));
         return NULL;
     }
 
@@ -115,10 +114,9 @@ static char *makefifo(const char *manufacturer, const char *product,
     }
 
     /* Create the named pipe. */
-    if (mkfifo(fifo_path, file_perm) == -1) {
-        log_fn("mkfifo: %s", strerror(errno));
-        log_fn("Unable to create named pipe %s.", fifo_path);
-        if (fifo_path) free(fifo_path);
+    if (mkfifo(fifo_path, file_perm) == -1 && errno != EEXIST) {
+        log_fn("mkfifo(): %s: %s", fifo_path, strerror(errno));
+        free(fifo_path);
         return NULL;
     }
 
