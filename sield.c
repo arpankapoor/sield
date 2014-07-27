@@ -1,4 +1,5 @@
 #include <errno.h>              /* errno */
+#include <fcntl.h>              /* fcntl() */
 #include <libudev.h>            /* udev */
 #include <signal.h>             /* sigaction() */
 #include <stdlib.h>             /* free(), exit() */
@@ -42,6 +43,7 @@ static void handler(int signum)
         /* cleanup */
         delete_udev_rule();
         rm_pidfile();
+        restore_smb_conf();
         exit(signum);
     }
 }
@@ -216,6 +218,7 @@ static int handle_plugged_in_devices(
 int main(int argc, char *argv[])
 {
     size_t i;
+    int fd, saved_flags;
     const int signals[] = {SIGTERM, SIGCHLD, SIGSEGV};
     struct sigaction action;
     struct udev *udev = NULL;
@@ -259,6 +262,13 @@ int main(int argc, char *argv[])
         udev_unref(udev);
         exit(EXIT_FAILURE);
     }
+
+    fd = udev_monitor_get_fd(monitor);
+
+    /* Make the monitor BLOCKING */
+    saved_flags = fcntl(fd, F_GETFL);
+    /* Mask out O_NONBLOCK */
+    fcntl(fd, F_SETFL, saved_flags & ~O_NONBLOCK);
 
     /* Device monitor setup successfully. */
     log_fn("Device monitor setup successfully.");

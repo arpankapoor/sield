@@ -158,9 +158,8 @@ int ask_passwd_cli(const char *manufacturer, const char *product,
         /* Open the named pipe for reading. */
         fp = fopen(fifo_path, "r");
         if (fp == NULL) {
-            log_fn("fopen: %s", strerror(errno));
-            log_fn("Unable to open %s for reading.", fifo_path);
-            if (fifo_path) free(fifo_path);
+            log_fn("fopen: %s: %s", fifo_path, strerror(errno));
+            free(fifo_path);
             continue;
         }
 
