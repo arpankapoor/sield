@@ -1,5 +1,6 @@
 #define _GNU_SOURCE     /* asprintf() */
 #include <errno.h>      /* errno */
+#include <stdarg.h>     /* va_start() */
 #include <stdio.h>      /* fprintf() */
 #include <stdlib.h>     /* free() */
 #include <string.h>     /* strerror() */
@@ -13,6 +14,7 @@
 #include "sield-passwd-check.h"     /* is_passwd_correct() */
 #include "sield-passwd-cli.h"
 
+static int write_to_tty(const char *tty, const char *frmt, ...);
 static int notify_tty(const char *tty, const char *manufacturer,
                       const char *product, const char *devnode);
 static int notify_all_ttys(const char *manufacturer, const char *product,
@@ -20,14 +22,8 @@ static int notify_all_ttys(const char *manufacturer, const char *product,
 static char *makefifo(const char *manufacturer, const char *product,
                       const char *devnode);
 
-/*
- * Notify user at given tty about device insertion.
- *
- *  0 => SUCCESS
- * -1 => FAILURE
- */
-static int notify_tty(const char *tty, const char *manufacturer,
-                      const char *product, const char *devnode)
+/* Write given message to given tty */
+static int write_to_tty(const char *tty, const char *format, ...)
 {
     FILE *tty_fp = NULL;
     char *tty_path = NULL;
@@ -39,17 +35,27 @@ static int notify_tty(const char *tty, const char *manufacturer,
 
     tty_fp = fopen(tty_path, "w");
     if (tty_fp == NULL) {
-        log_fn("fopen: %s", strerror(errno));
-        log_fn("Unable to write to %s.", tty);
+        log_fn("fopen: %s: %s", tty_path, strerror(errno));
         return -1;
     }
 
-    fprintf(tty_fp, "%s %s (%s) inserted. To scan and mount, execute %s\n",
-            manufacturer, product, devnode, PROGRAM_NAME);
+    va_list arg;
+    va_start(arg, format);
+    vfprintf(tty_fp, format, arg);
+    va_end(arg);
 
-    if (tty_path) free(tty_path);
+    free(tty_path);
     fclose(tty_fp);
     return 0;
+}
+
+/* Notify user at given tty about device insertion. */
+static int notify_tty(const char *tty, const char *manufacturer,
+                      const char *product, const char *devnode)
+{
+    return write_to_tty(tty, "%s %s (%s) inserted. "
+                        "To scan and mount, execute %s\n",
+                        manufacturer, product, devnode, PROGRAM_NAME);
 }
 
 /*
@@ -190,10 +196,12 @@ int ask_passwd_cli(const char *manufacturer, const char *product,
 
         if (is_passwd_correct(plain_txt_passwd)) {
             log_fn("%s (@%s) provided correct password.", username, tty);
+            write_to_tty(tty, "Password accepted.\n");
             passwd_match = 1;
         } else {
             log_fn("%s (@%s) entered incorrect password. Attempt #%d",
                    username, tty, i+1);
+            write_to_tty(tty, "Incorrect password given.\n");
             passwd_match = 0;
         }
 
