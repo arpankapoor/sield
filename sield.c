@@ -119,7 +119,10 @@ static void _handle_device(struct udev_device *device,
          *  OR
          * 2. Error(s) occurred.
          */
-        if (av_result != 0) return;
+        if (av_result == 1) return;
+
+        /* If errors occurred, mount as read only. */
+        if (av_result == 2) readonly = 1;
     }
 
     /* Mount the device */

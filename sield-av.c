@@ -2,6 +2,7 @@
 #include <stdio.h>          /* asprintf() */
 #include <stdlib.h>         /* free() */
 #include <string.h>         /* strdup() */
+#include <unistd.h>         /* access() */
 
 #include "sield-av.h"
 #include "sield-config.h"   /* get_sield_attr() */
@@ -27,14 +28,20 @@ int is_infected(const char *dir)
 
     /* Anti-virus path */
     avpath = get_sield_attr("av path");
-    if (!avpath) avpath = strdup(AVPATH);
+    if (avpath == NULL) avpath = strdup(AVPATH);
+
+    /* Check if avpath exists */
+    if (access(avpath, F_OK) == -1) {
+        log_fn("'avpath' %s doesn't exist. Will mount as read-only.", avpath);
+        return 2;
+    }
 
     /* Log file */
     logfile = get_sield_attr("log file");
-    if (!logfile) logfile = strdup(LOGFILE);
+    if (logfile == NULL) logfile = strdup(LOGFILE);
 
     if (asprintf(&cmd, "%s -r -l %s %s", avpath, logfile, dir) == -1) {
-        log_fn("clamscan: asprintf(): memory error.");
+        log_fn("asprintf(): memory error.");
         return 2;
     }
 
@@ -46,9 +53,9 @@ int is_infected(const char *dir)
     else if (avresult == 1) log_fn("Virus(es) found.");
     else log_fn("Some error(s) occurred while scanning.");
 
-    if (avpath) free(avpath);
-    if (logfile) free(logfile);
-    if (cmd) free(cmd);
+    free(avpath);
+    free(logfile);
+    free(cmd);
 
     return avresult;
 }
