@@ -281,7 +281,6 @@ int main(int argc, char *argv[])
     while (1) {
         /* Check if enabled. */
         if (get_sield_attr_int("enable") != 1) {
-            sleep(1);
             delete_udev_rule();
             continue;
         }
@@ -293,17 +292,13 @@ int main(int argc, char *argv[])
          * plugged in ("add"ed) to the system.
          */
         device = receive_device_with_action(monitor, "add");
-        if (device == NULL) {
-            sleep(1);
-            continue;
-        }
+        if (device == NULL) continue;
 
         /* The device should be using USB */
         parent = udev_device_get_parent_with_subsystem_devtype(
                     device, "usb", "usb_device");
         if (parent == NULL) {
             udev_device_unref(device);
-            sleep(1);
             continue;
         }
 

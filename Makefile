@@ -22,8 +22,16 @@ sld: sield-sld.o sield-log.o sield-config.o sield-passwd-cli-get.o
 sield-passwd-gui.o: sield-passwd-gui.c
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -c -o $@ $^
 
-install:
+install: sield sld passwd-sield
 	cp sield.conf /etc/
+	cp $^ /usr/bin/
+
+uninstall:
+	rm -f /usr/bin/sield
+	rm -f /usr/bin/sld
+	rm -f /usr/bin/passwd-sield
+	rm -f /etc/sield.conf
+	rm -f /etc/sield.passwd
 
 clean:
 	rm -f *.o
