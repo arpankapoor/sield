@@ -8,7 +8,7 @@
 #include "sield-config.h"
 #include "sield-log.h"  /* log_fn() */
 
-static const char *CONFIG_FILE = "/etc/sield.conf";
+static const char *CONFIG_FILE = "/etc/sield/sield.conf";
 
 static char *strip_whitespace(char *str);
 static char *seperate_line_into_name_value(char **line, const char *delim);

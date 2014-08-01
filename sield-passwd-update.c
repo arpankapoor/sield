@@ -3,14 +3,14 @@
 #include <stdio.h>      /* fopen() */
 #include <stdlib.h>     /* rand(), srand(), free() */
 #include <string.h>     /* strcmp() */
+#include <sys/stat.h>   /* mkdir() */
+#include <sys/types.h>  /* mkdir() */
 #include <time.h>       /* time() */
 #include <unistd.h>     /* crypt() */
 
 #include "sield-log.h"          /* log_fn() */
 #include "sield-passwd-check.h" /* is_passwd_correct() */
 #include "sield-passwd-cli-get.h"   /* get_passwd() */
-
-static const char *PASSWD_FILE = "/etc/sield.passwd";
 
 static char *generate_salt(void);
 static int set_passwd(const char *plain_txt_passwd);
@@ -33,6 +33,10 @@ static char *generate_salt(void)
     int i, size;
 
     salt = calloc(SALT_LEN + 5, sizeof(char));
+    if (salt == NULL) {
+        log_fn("calloc(): Memory error.");
+        return NULL;
+    }
 
     /* salt = "$6$random_string$" */
     salt[idx++] = '$';
@@ -61,24 +65,39 @@ static char *generate_salt(void)
  */
 static int set_passwd(const char *plain_txt_passwd)
 {
+    const char *CONF_DIR = "/etc/sield/";
     char *salt = NULL;
     char *encrypted_passwd = NULL;
     FILE *passwd_fp = NULL;
 
     /* Generate a salt. */
     salt = generate_salt();
+    if (salt == NULL) return -1;
+
     encrypted_passwd = crypt(plain_txt_passwd, salt);
+    if (encrypted_passwd == NULL) {
+        log_fn("Error encrypting password");
+        free(salt);
+        return -1;
+    }
+
+    /* Make the app directory if not already present */
+    if (mkdir(CONF_DIR, S_IRWXU) == -1 && errno != EEXIST) {
+        log_fn("mkdir(): %s: %s", CONF_DIR, strerror(errno));
+        free(salt);
+        return -1;
+    }
 
     passwd_fp = fopen(PASSWD_FILE, "w");
     if (passwd_fp == NULL) {
-        log_fn("fopen(): %s", strerror(errno));
-        log_fn("Failed to open password file \"%s\"", PASSWD_FILE);
+        log_fn("fopen(): %s: %s", PASSWD_FILE, strerror(errno));
+        free(salt);
         return -1;
     }
 
     fprintf(passwd_fp, "%s\n", encrypted_passwd);
 
-    if (salt) free(salt);
+    free(salt);
     fclose(passwd_fp);
     /*
      * DON'T FREE RETURN VALUE OF crypt(3).

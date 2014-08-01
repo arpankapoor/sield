@@ -125,7 +125,6 @@ static char *get_encrypted_user_passwd(uid_t uid)
  */
 static char *get_sield_passwd(void)
 {
-    const char *PASSWD_FILE = "/etc/sield.passwd";
     FILE *passwd_fp = NULL;
     char *encrypted_passwd = NULL;
     size_t len = 0;
