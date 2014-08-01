@@ -31,8 +31,7 @@ uninstall:
 	rm -f /usr/bin/sield
 	rm -f /usr/bin/sld
 	rm -f /usr/bin/passwd-sield
-	rm -f /etc/sield.conf
-	rm -f /etc/sield.passwd
+	rm -rf /etc/sield/
 
 clean:
 	rm -f *.o
