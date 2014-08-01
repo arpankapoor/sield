@@ -203,6 +203,9 @@ static int handle_plugged_in_devices(
                 }
             } else {
                 log_fn("Ignoring %s mounted at %s", devnode, mountpoint);
+                udev_device_unref(device);
+                free(mountpoint);
+                continue;
             }
 
             free(mountpoint);
