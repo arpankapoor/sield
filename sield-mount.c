@@ -155,7 +155,7 @@ int has_unmounted(const char *devnode)
         }
 
         mountpoint = get_mountpoint(devnode);
-        if (mountpoint != NULL) {
+        if (mountpoint == NULL) {
             free(mountpoint);
             fclose(fp);
             return 1;

@@ -30,15 +30,15 @@ static int handle_plugged_in_devices(
 static void handler(int signum)
 {
     if (signum == SIGCHLD) {
-        int status;
+        /* Reap all the zombies */
+        while (waitpid(-1, NULL, WNOHANG) > 0) continue;
 
-        while (waitpid(-1, &status, WNOHANG) > 0) continue;
         return;
     }
 
     if (signum == SIGSEGV || signum == SIGTERM) {
         if (signum == SIGSEGV) log_fn("Segmentation fault.");
-        if (signum == SIGTERM) log_fn("SIGTERM received.");
+        if (signum == SIGTERM) log_fn("SIGTERM received. Quitting safely.");
 
         /* cleanup */
         delete_udev_rule();
@@ -129,19 +129,21 @@ static void _handle_device(struct udev_device *device,
     mount_pt = mount_device(device, readonly);
 
     if (mount_pt) {
+        int share = get_sield_attr_bool("share");
+
         log_fn("Mounted %s (%s %s) at %s as %s.",
                devnode, manufacturer, product, mount_pt,
                readonly == 1 ? "read-only" : "read-write");
 
-        if (get_sield_attr_bool("share") == 1
-            && samba_share(mount_pt, manufacturer, product) != -1) {
-
+        if (share == 1 && samba_share(mount_pt, manufacturer, product) != -1)
             log_fn("Shared %s on the samba network.", mount_pt);
 
-            if (has_unmounted(mount_pt)) {
-                log_fn("%s was unmounted.", devnode);
-                if (restore_smb_conf()) log_fn("Restored smb.conf");
-            }
+        if (has_unmounted(mount_pt)) {
+            log_fn("%s was unmounted.", devnode);
+
+            /* Restore original smb.conf */
+            if (share == 1 && restore_smb_conf() == 0)
+                log_fn("Restored smb.conf");
         }
 
         free(mount_pt);
