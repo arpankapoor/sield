@@ -1,5 +1,6 @@
 #define _GNU_SOURCE     /* getline() */
 #define _BSD_SOURCE     /* strsep() */
+#include <ctype.h>      /* isspace() */
 #include <errno.h>      /* errno */
 #include <stdio.h>      /* fopen() */
 #include <stdlib.h>     /* free() */
@@ -27,7 +28,7 @@ static char *strip_whitespace(char *str)
     if (str == NULL) return NULL;
 
     /* Remove whitespace from the beginning of the string. */
-    while (*str != '\0' && (*str == ' ' || *str == '\t')) str++;
+    while (*str != '\0' && isspace(*str)) str++;
 
     /* Entire line is whitespace */
     if (*str == '\0') return NULL;
@@ -40,7 +41,7 @@ static char *strip_whitespace(char *str)
     str--;
 
     /* Move backwards until a non-whitespace character is found. */
-    while (*str == ' ' || *str == '\t') str--;
+    while (isspace(*str)) str--;
     str++;
 
     *str = '\0';
