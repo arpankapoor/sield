@@ -23,7 +23,7 @@ sield-passwd-gui.o: sield-passwd-gui.c
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -c -o $@ $^
 
 install:
-	mkdir /etc/sield/
+	mkdir -p /etc/sield/
 	cp sield.conf /etc/sield/
 	cp sield sld passwd-sield /usr/bin/
 
