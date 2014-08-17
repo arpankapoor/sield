@@ -14,7 +14,7 @@ struct udev_monitor *monitor_device_with_subsystem_devtype(
 struct udev_device *receive_device_with_action(
         struct udev_monitor *monitor, const char *action);
 
-int delete_udev_rule(void);
-int write_udev_rule(void);
+void delete_udev_rule(void);
+void write_udev_rule(void);
 
 #endif

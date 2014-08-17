@@ -88,21 +88,19 @@ struct udev_device *receive_device_with_action(
 }
 
 /* Delete udev rule file. */
-int delete_udev_rule(void)
+void delete_udev_rule(void)
 {
     /* File doesn't exist */
     if (access(UDEV_RULE_FILE, F_OK) == -1) return 0;
 
     if (remove(UDEV_RULE_FILE) == -1) {
         log_fn("remove: %s: %s", UDEV_RULE_FILE, strerror(errno));
-        return -1;
+        return;
     }
-
-    return 0;
 }
 
 /* Write the udev rule to prevent automount. */
-int write_udev_rule(void)
+void write_udev_rule(void)
 {
     const char *rule =
         "ACTION==\"add|change\", SUBSYSTEM==\"block\","
@@ -118,11 +116,10 @@ int write_udev_rule(void)
     fp = fopen(UDEV_RULE_FILE, "w");
     if (fp == NULL) {
         log_fn("fopen: %s: %s", UDEV_RULE_FILE, strerror(errno));
-        return -1;
+        return;
     }
 
     fprintf(fp, "%s\n", rule);
 
     fclose(fp);
-    return 0;
 }
