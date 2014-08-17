@@ -27,13 +27,13 @@ struct udev_enumerate *enumerate_devices_with_subsystem(
 
     rt = udev_enumerate_add_match_subsystem(enumerate, subsystem);
     if (rt != 0) {
-        log_fn("Failed to setup enumeration filter.");
+        log_fn("[udev] Failed to setup enumeration filter.");
         return NULL;
     }
 
     rt = udev_enumerate_scan_devices(enumerate);
     if (rt != 0) {
-        log_fn("Failed to scan enumeration devices.");
+        log_fn("[udev] Failed to scan enumeration devices.");
         return NULL;
     }
 
@@ -53,20 +53,20 @@ struct udev_monitor *monitor_device_with_subsystem_devtype(
 
     monitor = udev_monitor_new_from_netlink(udev, event_source);
     if (monitor == NULL) {
-        log_fn("Failed to setup a new udev_monitor.");
+        log_fn("[udev] Failed to setup a new udev_monitor.");
         return NULL;
     }
 
     rt = udev_monitor_filter_add_match_subsystem_devtype(
             monitor, subsystem, devtype);
     if (rt != 0) {
-        log_fn("Failed to setup monitor filter.");
+        log_fn("[udev] Failed to setup monitor filter.");
         return NULL;
     }
 
     rt = udev_monitor_enable_receiving(monitor);
     if (rt != 0) {
-        log_fn("Failed to bind udev_monitor to event source.");
+        log_fn("[udev] Failed to bind udev_monitor to event source.");
         return NULL;
     }
 
@@ -77,7 +77,6 @@ struct udev_monitor *monitor_device_with_subsystem_devtype(
 struct udev_device *receive_device_with_action(
         struct udev_monitor *monitor, const char *action)
 {
-    /* udev_monitor_receive_device is NONBLOCKING */
     struct udev_device *device = udev_monitor_receive_device(monitor);
 
     if (device != NULL) {
@@ -95,7 +94,7 @@ int delete_udev_rule(void)
     if (access(UDEV_RULE_FILE, F_OK) == -1) return 0;
 
     if (remove(UDEV_RULE_FILE) == -1) {
-        log_fn("Unable to delete udev rule file: %s", strerror(errno));
+        log_fn("remove: %s: %s", UDEV_RULE_FILE, strerror(errno));
         return -1;
     }
 
@@ -118,7 +117,7 @@ int write_udev_rule(void)
 
     fp = fopen(UDEV_RULE_FILE, "w");
     if (fp == NULL) {
-        log_fn("Can't open udev rule file for writing: %s", strerror(errno));
+        log_fn("fopen: %s: %s", UDEV_RULE_FILE, strerror(errno));
         return -1;
     }
 

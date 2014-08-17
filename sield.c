@@ -18,7 +18,7 @@
 #include "sield-share.h"        /* samba_share() */
 #include "sield-udev-helper.h"  /* monitor_device_with_subsystem_devtype() */
 
-static void handler(int signum);
+static void signal_handler(int signum);
 static void _handle_device(struct udev_device *device,
                            struct udev_device *parent);
 static void handle_device(struct udev_device *device,
@@ -27,7 +27,7 @@ static int handle_plugged_in_devices(
         struct udev *udev, const char *subsystem, const char *devtype);
 
 /* Catch signals */
-static void handler(int signum)
+static void signal_handler(int signum)
 {
     if (signum == SIGCHLD) {
         /* Reap all the zombies */
@@ -157,12 +157,13 @@ static int handle_plugged_in_devices(
     struct udev_list_entry *devices_list = NULL;
     struct udev_list_entry *dev_list_entry = NULL;
 
-    /* List and handle all devices that are already plugged in. */
+    /* Enumerate all devices that are already plugged in. */
     enumerate = enumerate_devices_with_subsystem(udev, subsystem);
     if (enumerate == NULL) return -1;
 
     devices_list = udev_enumerate_get_list_entry(enumerate);
 
+    /* Iterate through each of the devices */
     udev_list_entry_foreach(dev_list_entry, devices_list) {
         char *mountpoint = NULL;
         const char *devnode = NULL;
@@ -235,7 +236,7 @@ int main(int argc, char *argv[])
     struct udev_device *parent = NULL;
 
     /* Setup signal handlers */
-    action.sa_handler = handler;
+    action.sa_handler = signal_handler;
     sigemptyset(&action.sa_mask);
     action.sa_flags = 0;
 
@@ -255,7 +256,7 @@ int main(int argc, char *argv[])
 
     udev = udev_new();
     if (udev == NULL) {
-        log_fn("udev object not created. Quitting.");
+        log_fn("[udev] udev object could not be created. Quitting.");
         exit(EXIT_FAILURE);
     }
 
@@ -266,7 +267,6 @@ int main(int argc, char *argv[])
     monitor = monitor_device_with_subsystem_devtype(
                 udev, "udev", "block", "partition");
     if (monitor == NULL) {
-        log_fn("Failed to initialize udev monitor. Quitting.");
         udev_unref(udev);
         exit(EXIT_FAILURE);
     }
